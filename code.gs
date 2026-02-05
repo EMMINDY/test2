@@ -1,430 +1,2643 @@
-const CONFIG = {
-  SPREADSHEET_ID: '1dTu9T9xBPKMvY2DFfuHPkYR1Bgl19My7QPVbHXqW4Aw', // ตรวจสอบ ID Sheet ของท่านให้ถูกต้อง
-  SHEET_NAME_DATA: 'ข้อมูลทั้งหมด',
-  SHEET_NAME_PLANS_SPECIAL: 'แผนการเรียนห้องเรียนพิเศษ',
-  SHEET_NAME_PLANS_GENERAL: 'แผนการเรียนห้องเรียนปกติ',
-  SHEET_NAME_ADDRESS: 'อ้างอิงที่อยู่',
-  SHEET_NAME_ADMIN: 'แอดมิน',
-  FOLDER_ID_PHOTO: '1xfbsjSx_o6jwVqG6ypjFoYTwdSoRgvAU',     // ตรวจสอบ ID Folder รูป
-  FOLDER_ID_TRANSCRIPT: '1IUh9NAE64cPGCq0MluT8oqOdD2ntvR9G', // ตรวจสอบ ID Folder ปพ.1
-  FOLDER_ID_CONDUCT: '1iysw3WTrUr6NH2T3teyf56wpG1-xH_RZ' // ตรวจสอบ ID Folder ปพ.1
-};
-
-
-function doGet(e) {
-  return HtmlService.createTemplateFromFile('Index')
-    .evaluate()
-    .setTitle('ระบบรับสมัครนักเรียน 2569 - โรงเรียนอรัญประเทศ') // แก้ปี 2569
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
-
-
-function getSheet(name) {
-  try { return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(name); } catch(e) { throw new Error("ไม่พบแผ่นงาน: " + name); }
-}
-
-
-function formatDate(d) {
-  if (!d) return "";
-  return (d instanceof Date) ? Utilities.formatDate(d, "GMT+7", "yyyy-MM-dd") : String(d);
-}
-
-
-function getStudyPlans(level, type) {
-  try {
-    const sheetName = (type.includes('พิเศษ')) ? CONFIG.SHEET_NAME_PLANS_SPECIAL : CONFIG.SHEET_NAME_PLANS_GENERAL;
-    const sheet = getSheet(sheetName);
-    const col = (level === 'ชั้นมัธยมศึกษาปีที่ 1') ? 1 : 2;
-    return sheet.getRange(2, col, sheet.getLastRow()-1, 1).getValues().flat().filter(String);
-  } catch(e) { return []; }
-}
-
-
-function getAddressData() {
-  try { return getSheet(CONFIG.SHEET_NAME_ADDRESS).getRange(2, 1, getSheet(CONFIG.SHEET_NAME_ADDRESS).getLastRow()-1, 4).getValues(); } catch(e) { return []; }
-}
-
-
-function adminLogin(u, p) {
-  try {
-    const sheet = getSheet(CONFIG.SHEET_NAME_ADMIN);
-    const data = sheet.getDataRange().getDisplayValues();
-    for(let i=1; i<data.length; i++) {
-      let dbUser = String(data[i][0]).trim();
-      let dbPass = String(data[i][1]).trim();
-      if(dbUser !== "" && dbUser === String(u).trim() && dbPass === String(p).trim()) {
-        return { success: true, role: parseInt(data[i][2]) || 1, name: data[i][3] || "เจ้าหน้าที่" };
-      }
-    }
-    return { success: false, message: "Username หรือ Password ไม่ถูกต้อง" };
-  } catch(e) { return { success: false, message: "Server Error: " + e.message }; }
-}
-
-function submitApplication(fd) {
-  var status = getRecruitStatus();
-  var type = fd.applyType; 
-
-  if (type === 'special' && !status.special) {
-    throw new Error("ขออภัย ระบบรับสมัคร 'ห้องเรียนพิเศษ' ปิดทำการแล้ว");
-  } else if (type === 'general' && !status.general) {
-    throw new Error("ขออภัย ระบบรับสมัคร 'ห้องเรียนทั่วไป' ปิดทำการแล้ว");
-  }
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>ระบบรับสมัครนักเรียน 2569 - โรงเรียนอรัญประเทศ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
-  const lock = LockService.getScriptLock();
-  if(!lock.tryLock(10000)) throw new Error("ระบบกำลังประมวลผลในส่วนอื่นอยู่ กรุณารอ 10 วินาทีแล้วลองใหม่อีกครั้ง");
- 
-  try {
-    const sheet = getSheet(CONFIG.SHEET_NAME_DATA);
-    let rowIndex = null;
-    let appId = Utilities.formatDate(new Date(), "GMT+7", "yyyyMMddHHmmss");
-    let timestamp = new Date();
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+<style>
+     /* 1. ตั้งค่าฟอนต์และพื้นหลัง */
+    body { 
+      font-family: 'Sarabun', sans-serif; 
+      background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%); 
+      min-height: 100vh;
+      color: #333;
+    }
     
-    const idCardClean = String(fd.idCard).replace(/'/g, '').trim().toUpperCase();
+    /* 2. กล่องเนื้อหาหลัก */
+    .main-container { 
+      max-width: 1000px; 
+      margin: 40px auto; 
+      background: rgba(255, 255, 255, 0.95);
+      padding: 50px; 
+      border-radius: 20px; 
+      box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      position: relative;
+      overflow: hidden;
+    }
+    .main-container::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 6px;
+      background: linear-gradient(90deg, #0d6efd, #0dcaf0);
+    }
+   
+    /* 3. โลโก้และหัวข้อ */
+    .school-logo { 
+      max-width: 130px; 
+      height: auto; 
+      margin-bottom: 15px; 
+      filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1)); 
+      transition: transform 0.3s;
+    }
+    .school-logo:hover { transform: scale(1.05) rotate(-3deg); }
+    
+    .main-title { 
+      color: #0d6efd; 
+      font-weight: 800; 
+      letter-spacing: -0.5px;
+      margin-bottom: 5px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.05);
+    }
+    .sub-title { color: #6c757d; font-weight: 500; }
 
-    const strictPlans = [
-       "SMTE (วิทย์-คณิต-เทคโนโลยี-สิ่งแวดล้อม)",
-       "ห้องเรียนพิเศษวิทยาศาสตร์ คณิตศาสตร์ เทคโนโลยีและสิ่งแวดล้อม (SMTE)"
-    ];
+    /* 4. ปุ่มกด */
+    .btn { border-radius: 50px; padding: 10px 25px; font-weight: 600; letter-spacing: 0.5px; transition: all 0.3s; }
+    .btn-primary { 
+      background: linear-gradient(45deg, #0d6efd, #0a58ca); 
+      border: none; 
+      box-shadow: 0 4px 15px rgba(13, 110, 253, 0.3);
+    }
+    .btn-primary:hover { 
+      transform: translateY(-2px); 
+      box-shadow: 0 8px 20px rgba(13, 110, 253, 0.4); 
+    }
+    .btn-success {
+      background: linear-gradient(45deg, #198754, #157347);
+      border: none;
+      box-shadow: 0 4px 15px rgba(25, 135, 84, 0.3);
+    }
+    
+    .btn-lg-custom { 
+      padding: 25px; 
+      font-size: 1.3rem; 
+      border-radius: 15px; 
+      border: none;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-lg-custom:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
 
-    if (strictPlans.includes(fd.plan) && /[^0-9]/.test(idCardClean)) {
-       throw new Error("แผนการเรียน " + fd.plan + " อนุญาตให้ใช้เฉพาะเลขบัตรประชาชน (ตัวเลขล้วน) เท่านั้น");
+    /* 5. ฟอร์มและอินพุต */
+    .form-label { font-weight: 600; color: #495057; font-size: 0.95rem; }
+    .form-control, .form-select { 
+      border-radius: 10px; 
+      padding: 12px 15px; 
+      border: 1px solid #dee2e6; 
+      background-color: #f8f9fa;
+      transition: all 0.3s;
+    }
+    .form-control:focus, .form-select:focus { 
+      background-color: #fff; 
+      border-color: #0d6efd; 
+      box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.1); 
     }
 
-    // --- [จุดที่ 1] แก้ Index เช็คเลขบัตรซ้ำ (จาก 13 เป็น 17) ---
-    if (!fd.isEditMode) {
-      const allData = sheet.getDataRange().getValues();
-      // เดิม row[13] -> แก้เป็น row[17] (เพราะมีข้อมูลแทรก 4 ช่อง)
-      const isDuplicate = allData.some(row => String(row[17]).replace(/'/g, '').trim() === idCardClean);
-      
-      if (isDuplicate) {
-        throw new Error("เลขบัตรประชาชนนี้ (" + idCardClean + ") ได้ลงทะเบียนในระบบเรียบร้อยแล้ว");
+  /* --- [แก้ไข] ปรับปรุงกล่องเลขบัตรประชาชนให้รองรับทุกหน้าจอ --- */
+    .digit-container { 
+      display: flex; 
+      gap: 8px; 
+      justify-content: center; /* จัดกึ่งกลาง */
+      flex-wrap: wrap;         /* สำคัญ: ยอมให้ปัดบรรทัดใหม่ได้ถ้าพื้นที่ไม่พอ */
+      padding: 10px 0; 
+    }
+
+    /* จัดชิดซ้ายเฉพาะในแบบฟอร์มกรอกข้อมูล เพื่อความสวยงาม */
+    #form-section .digit-container { 
+      justify-content: flex-start; 
+    }
+
+    /* ปรับขนาดกล่อง input */
+    .digit-box { 
+      width: 42px;    /* ลดขนาดลงเล็กน้อยจาก 45px เพื่อให้ประหยัดพื้นที่ */
+      height: 50px; 
+      text-align: center; 
+      font-size: 1.3rem; 
+      font-weight: bold; 
+      color: #0d6efd;
+      border: 2px solid #e9ecef; 
+      border-radius: 10px; 
+      background: #fff;
+      transition: all 0.2s; 
+      flex-shrink: 0;
+      margin-bottom: 8px; /* เพิ่มระยะห่างด้านล่าง เผื่อกรณีปัดบรรทัด */
+    }
+    
+    .digit-box:focus { 
+      border-color: #0d6efd; 
+      transform: translateY(-3px); 
+      box-shadow: 0 5px 15px rgba(13, 110, 253, 0.15); 
+      outline: none; 
+    }
+
+    /* สำหรับมือถือ (ปรับให้เล็กและกระชับขึ้น) */
+    @media (max-width: 768px) {
+      .digit-container { gap: 5px; }
+      .digit-box { 
+        width: 35px; 
+        height: 45px; 
+        font-size: 1.1rem; 
+        margin-bottom: 5px;
       }
     }
 
-    // --- [จุดที่ 2] แก้ Index ค้นหาแถวเดิมตอนแก้ไข (จาก 13 เป็น 17) ---
-    if(fd.isEditMode && fd.editIdCard) {
-       const data = sheet.getDataRange().getValues();
-       for(let i=data.length-1; i>=1; i--) {
-         // เดิม data[i][13] -> แก้เป็น data[i][17]
-         if(String(data[i][17]).replace(/'/g,'') === String(fd.editIdCard)) {
-            if(data[i][3] !== 'ให้ปรับปรุงข้อมูล') throw new Error("สถานะปัจจุบันคือ '" + data[i][3] + "' ไม่อนุญาตให้แก้ไข");
-            rowIndex = i+1; 
-            appId = data[i][1]; 
-            break;
-         }
-       }
-       if(!rowIndex) throw new Error("ไม่พบข้อมูลเดิมในระบบที่ต้องการแก้ไข");
+    /* 6. Section Titles */
+    .section-title { 
+      border-left: none;
+      background: linear-gradient(90deg, #e7f1ff, #fff);
+      color: #0d6efd;
+      padding: 15px 20px; 
+      margin: 30px 0 20px; 
+      font-weight: 700; 
+      font-size: 1.1rem;
+      border-radius: 10px; 
+      display: flex; align-items: center;
+    }
+    .section-title i { margin-right: 10px; font-size: 1.3rem; }
+
+    /* อื่นๆ */
+    .hidden { display: none !important; }
+    .loading-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(255,255,255,0.8); backdrop-filter: blur(5px); z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+    .req-star { color: #dc3545; margin-left: 3px; }
+    
+    /* CSS สำหรับ Report Section */
+    .stat-item { border-left: 4px solid #0d6efd; transition: 0.2s; }
+    .stat-item:hover { transform: translateX(5px); }
+    .status-pill { font-size: 0.8rem; padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
+    .table-head-fix th { background: #f8f9fa; white-space: nowrap; }
+    .tab-content-area { display: none; }
+    .tab-active { display: block !important; animation: fadeIn 0.3s; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* --- [เพิ่มใหม่] Responsive Styles สำหรับ Admin และ Mobile --- */
+    
+    @media (max-width: 992px) {
+      /* iPad และจอขนาดกลาง */
+      .main-container { 
+        padding: 30px; 
+        max-width: 95%;
+      }
     }
 
-    // --- [จุดที่ 3] แก้ Index ดึง URL รูปเดิม (บวกเพิ่ม 4 ช่อง) ---
-    // รูปถ่าย: เดิม 39 -> เป็น 43
-    // ปพ.1: เดิม 40 -> เป็น 44
-    // ความประพฤติ: เดิม 41 -> เป็น 45
-    let photoUrl = rowIndex ? sheet.getRange(rowIndex, 43).getValue() : "-";
-    let transUrl = rowIndex ? sheet.getRange(rowIndex, 44).getValue() : "-";
-    let conductUrl = rowIndex ? sheet.getRange(rowIndex, 45).getValue() : "-";
+    @media (max-width: 768px) {
+      /* มือถือ */
+      .main-container { 
+        padding: 20px 15px; /* ลด Padding */
+        margin: 15px auto;
+        width: 98%;
+        border-radius: 15px;
+      }
+      .digit-box { width: 38px; height: 48px; font-size: 1.2rem; }
+      .btn-lg-custom { font-size: 1.1rem; padding: 20px; }
+      
+      /* ปรับส่วนหัว Admin */
+      #admin-dashboard h3 { font-size: 1.5rem; }
+      #admin-dashboard .btn { width: 100%; margin-bottom: 5px; } /* ปุ่มเต็มจอ */
+      #admin-dashboard .d-flex.justify-content-between {
+         flex-direction: column; 
+         align-items: stretch !important;
+         gap: 10px;
+      }
+      
+      /* ปรับตาราง */
+      .table th, .table td { 
+         font-size: 0.9rem; 
+         padding: 0.5rem;
+         white-space: nowrap; /* ให้เลื่อนแนวนอนเอาแทนการบีบ */
+      }
+    }
+
+      /* 1. พื้นหลัง: ไล่สีพาสเทลอ่อนๆ (เขียวจางๆ ไป ชมพูจางๆ) ดูสบายตา */
+    body { 
+      background: linear-gradient(135deg, #eafaf1 0%, #fdeef5 100%) !important; 
+    }
+
+    /* 2. แถบสีด้านบนสุดของกล่อง (ไล่สี เขียว -> ชมพู) */
+    .main-container::before {
+      background: linear-gradient(90deg, #198754, #d63384) !important;
+    }
+
+    /* 3. ชื่อโรงเรียน (สีชมพูเข้ม) และคำอธิบาย (สีเทาอมเขียว) */
+    .main-title { 
+      color: #d63384 !important; /* ชมพู */
+      text-shadow: 1px 1px 0px rgba(255, 255, 255, 0.8);
+    }
+    .sub-title { color: #5a7063 !important; }
+
+    /* 4. หัวข้อแต่ละส่วน (พื้นหลังชมพูอ่อน ตัวหนังสือสีเขียวเข้ม) */
+    .section-title { 
+      background: linear-gradient(90deg, #fce4ec, #fff) !important;
+      color: #0f5132 !important; /* เขียวแก่ */
+      border-left: 5px solid #d63384 !important; /* ขอบซ้ายชมพู */
+    }
+    .section-title i { color: #d63384 !important; } /* ไอคอนหัวข้อสีชมพู */
+
+    /* 5. ปุ่มกด (Button Theme) */
+    
+    /* เปลี่ยนปุ่มสีฟ้า (btn-primary) เป็น "สีชมพูสด" (ใช้สำหรับห้องเรียนพิเศษ/ปุ่มสำคัญ) */
+    .btn-primary { 
+      background: linear-gradient(45deg, #d63384, #b02a6b) !important; 
+      border: none !important;
+      box-shadow: 0 4px 15px rgba(214, 51, 132, 0.3) !important;
+    }
+    .btn-primary:hover { 
+      background: linear-gradient(45deg, #c2185b, #a01d5a) !important;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(214, 51, 132, 0.4) !important;
+    }
+
+    /* ปรับปุ่มสีเขียว (btn-success) ให้ดูสดชื่นขึ้น (ใช้สำหรับห้องเรียนทั่วไป/ปุ่มยืนยัน) */
+    .btn-success {
+      background: linear-gradient(45deg, #198754, #146c43) !important;
+      box-shadow: 0 4px 15px rgba(25, 135, 84, 0.3) !important;
+    }
+
+    /* 6. กล่องกรอกข้อมูล (Focus แล้วเป็นสีชมพู) */
+    .form-control:focus, .form-select:focus { 
+      border-color: #d63384 !important; 
+      box-shadow: 0 0 0 4px rgba(214, 51, 132, 0.15) !important; 
+    }
+
+    /* 7. กล่องเลขบัตรประชาชน (ตัวเลขสีชมพู ขอบสีเขียวอ่อน) */
+    .digit-box { 
+      color: #d63384 !important; 
+      border: 2px solid #d1e7dd !important;
+    }
+    .digit-box:focus {
+      border-color: #d63384 !important;
+      box-shadow: 0 5px 15px rgba(214, 51, 132, 0.15) !important;
+    }
+
+    /* 8. ไอคอนและตัวเน้นอื่นๆ */
+    .text-primary { color: #d63384 !important; } /* เปลี่ยนข้อความสีฟ้าเป็นชมพู */
+    .spinner-border.text-primary { color: #d63384 !important; } /* ตัวโหลดหมุนๆ เป็นสีชมพู */
+    
+    /* ไอคอนหน้าหลัก */
+    .btn-lg-custom i { color: #fff !important; } /* ไอคอนในปุ่มใหญ่ให้เป็นสีขาว */
+
+</style>
+</head>
+<body>
+  <div id="initial-loader" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 9999; display: flex; justify-content: center; align-items: center; transition: opacity 0.5s ease-out;">
+    <div class="text-center">
+      <div class="spinner-border text-primary mb-3" style="width: 3.5rem; height: 3.5rem;" role="status"></div>
+      <h5 class="fw-bold text-secondary animate__animated animate__pulse animate__infinite">กำลังเข้าสู่ระบบ...</h5>
+      <small class="text-muted">กรุณารอสักครู่</small>
+    </div>
+  </div>
+
+  <div id="loading" class="loading-overlay hidden">
+    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
+    
+    <div class="mt-3 fw-bold text-primary">กำลังบันทึกข้อมูล...</div>
+    
+    <div class="progress mt-3" style="width: 60%; height: 25px; border-radius: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+        <div id="progressBar" 
+             class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+             role="progressbar" 
+             style="width: 0%; font-size: 14px;">
+             0%
+        </div>
+    </div>
+    <small class="text-muted mt-2">กรุณาอย่าปิดหน้าต่างนี้</small>
+</div>
+
+  <div class="container main-container">
+    <div class="text-center mb-5" id="main-header">
+      <img src="https://drive.google.com/thumbnail?id=1orEjf83Ew6ygXmhqSyEmGawrvy0UUhGq&sz=w1000" alt="ตราโรงเรียน" class="school-logo">
+      <h3 class="main-title">โรงเรียนอรัญประเทศ</h3>
+      <p class="sub-title">ระบบรับสมัครนักเรียนออนไลน์ ประจำปีการศึกษา 2569</p>
+    </div>
+
+    <div id="home-section">
+      <div class="row g-3">
+        <div class="col-12"><div class="alert alert-primary text-center shadow-sm">ยินดีต้อนรับเข้าสู่ระบบรับสมัคร</div></div>
+        <div class="col-md-6"><button class="btn btn-primary w-100 btn-lg-custom shadow-sm" onclick="openForm('special')"><i class="bi bi-star-fill me-2"></i>ห้องเรียนพิเศษ</button></div>
+        <div class="col-md-6"><button class="btn btn-success w-100 btn-lg-custom shadow-sm" onclick="openForm('general')"><i class="bi bi-book-half me-2"></i>ห้องเรียนทั่วไป</button></div>
+        <div class="col-12 mt-4"><button class="btn btn-outline-secondary w-100 py-3 rounded-pill" onclick="showSection('status-section')"><i class="bi bi-search me-2"></i>ตรวจสอบสถานะ / แก้ไขข้อมูล</button></div>
+        <div class="col-12 mt-2">
+          <button class="btn btn-info w-100 py-3 rounded-pill text-white shadow-sm" onclick="showReport()">
+            <i class="bi bi-list-ol me-2"></i>ตรวจสอบรายชื่อและยอดผู้สมัคร
+          </button>
+        </div>
+        <div class="col-12 text-center mt-3"><a href="#" onclick="showSection('admin-login-section')" class="text-muted text-decoration-none small"><i class="bi bi-shield-lock"></i> เจ้าหน้าที่</a></div>
+      </div>
+    </div>
+
+    <div id="form-section" class="hidden">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="text-primary fw-bold"><i class="bi bi-pencil-square me-2"></i>แบบฟอร์มรับสมัคร</h4>
+        <button class="btn btn-sm btn-outline-secondary" onclick="softReset()">ยกเลิก</button>
+      </div>
+      <div class="alert alert-warning hidden shadow-sm" id="edit-alert"><i class="bi bi-pencil-fill me-2"></i>ท่านกำลังอยู่ในโหมดแก้ไขข้อมูล</div>
+      <div class="alert alert-light border shadow-sm text-danger mb-3"><i class="bi bi-exclamation-circle-fill me-2"></i>กรุณากรอกข้อมูลให้ครบถ้วนทุกช่องที่มีเครื่องหมาย *</div>
+     
+      <form id="appForm" onsubmit="handleSubmit(event)">
+        <input type="hidden" id="applyType"><input type="hidden" id="isEditMode" value="false"><input type="hidden" id="editIdCard">
+       
+        <h5 class="section-title">1. ข้อมูลส่วนตัวนักเรียน</h5>
+        <div class="row g-3">
+           <div class="col-md-6"><label class="form-label">ระดับชั้นที่สมัคร <span class="req-star">*</span></label><select id="level" class="form-select" required onchange="loadPlans()"><option value="">เลือก</option><option value="ชั้นมัธยมศึกษาปีที่ 1">ม.1</option><option value="ชั้นมัธยมศึกษาปีที่ 4">ม.4</option></select></div>
+           <div class="col-md-6"><label class="form-label">แผนการเรียน <span class="req-star">*</span></label><select id="plan" class="form-select" required><option value="">- กรุณาเลือกระดับชั้นก่อน -</option></select></div>
+           
+           <div class="col-md-2"><label class="form-label">คำนำหน้า</label><select id="prefix" class="form-select"><option>เด็กชาย</option><option>เด็กหญิง</option><option>นาย</option><option>นางสาว</option></select></div>
+           <div class="col-md-5"><label class="form-label">ชื่อจริง <span class="req-star">*</span></label><input type="text" id="firstname" class="form-control text-only" required placeholder="ไม่ต้องใส่คำนำหน้า"></div>
+           <div class="col-md-5"><label class="form-label">นามสกุล <span class="req-star">*</span></label><input type="text" id="lastname" class="form-control text-only" required></div>
+
+           <div class="col-md-6">
+  <label class="form-label">ชื่อจริง (ภาษาอังกฤษ)</label>
+  <input type="text" id="firstnameEn" class="form-control text-only" placeholder="English First Name">
+</div>
+<div class="col-md-6">
+  <label class="form-label">นามสกุล (ภาษาอังกฤษ)</label>
+  <input type="text" id="lastnameEn" class="form-control text-only" placeholder="English Last Name">
+</div>
+
+<div class="col-12"><hr class="my-3 text-secondary"></div>
+<h5 class="section-title"><i class="bi bi-building"></i> 1.1 ข้อมูลโรงเรียนเดิม</h5>
+<div class="row g-3">
+   <div class="col-md-8">
+     <label class="form-label">จบจากโรงเรียน (โรงเรียนเดิม)</label>
+     <input type="text" id="oldSchoolName" class="form-control" placeholder="ระบุชื่อโรงเรียนที่กำลังศึกษาหรือจบการศึกษา">
+   </div>
+   <div class="col-md-4">
+     <label class="form-label">จังหวัด</label>
+     <input type="text" id="oldSchoolProvince" class="form-control" placeholder="ระบุจังหวัด">
+   </div>
+</div>
+           
+           <div class="col-md-4"><label class="form-label">วันเกิด <span class="req-star">*</span></label><input type="date" id="dob" class="form-control" required></div>
+           <div class="col-md-4">
+                <label class="form-label">สัญชาติ</label>
+                   <select id="nationality" class="form-select" onchange="toggleOther('nationality', 'nationality_other')">
+                      <option value="ไทย">ไทย</option>
+                      <option value="กัมพูชา">กัมพูชา</option>
+                      <option value="อื่นๆ">อื่นๆ (โปรดระบุ)</option>
+                     </select>
+                  <input type="text" id="nationality_other" class="form-control mt-2 hidden" placeholder="ระบุสัญชาติ">
+                </div>
+          <div class="col-md-4">
+                <label class="form-label">ศาสนา</label>
+                     <select id="religion" class="form-select" onchange="toggleOther('religion', 'religion_other')">
+                        <option value="พุทธ">พุทธ</option>
+                        <option value="อิสลาม">อิสลาม</option>
+                        <option value="คริสต์">คริสต์</option>
+                        <option value="อื่นๆ">อื่นๆ (โปรดระบุ)</option>
+                      </select>
+                    <input type="text" id="religion_other" class="form-control mt-2 hidden" placeholder="ระบุศาสนา">
+                  </div>
+           
+           <div class="col-12">
+             <label class="form-label">เลขบัตรประชาชน (13 หลัก) <span class="req-star">*</span></label>
+             <div class="digit-container" id="idCard-container"></div>
+             <input type="hidden" id="idCard">
+           </div>
+           <div class="col-12">
+             <label class="form-label">เบอร์โทรศัพท์ (10 หลัก) <span class="req-star">*</span></label>
+             <div class="digit-container" id="phone-container"></div>
+             <input type="hidden" id="phone">
+           </div>
+        </div>
+
+        <h5 class="section-title">2. ข้อมูลที่อยู่</h5>
+        <div class="row g-3">
+           <div class="col-md-3"><label class="form-label">บ้านเลขที่ <span class="req-star">*</span></label><input type="text" id="addrNo" class="form-control" required></div>
+           <div class="col-md-2"><label class="form-label">หมู่ <span class="req-star">*</span></label><input type="text" id="addrMoo" class="form-control" required></div>
+           <div class="col-md-3"><label class="form-label">ซอย <span class="req-star">*</span></label><input type="text" id="addrSoi" class="form-control" required></div>
+           <div class="col-md-4"><label class="form-label">ถนน <span class="req-star">*</span></label><input type="text" id="addrRoad" class="form-control" required></div>
+           <div class="col-md-4"><label class="form-label">จังหวัด <span class="req-star">*</span></label><select id="province" class="form-select" required onchange="chProv()"><option value="">เลือก</option></select></div>
+           <div class="col-md-4"><label class="form-label">อำเภอ <span class="req-star">*</span></label><select id="district" class="form-select" required onchange="chDist()" disabled><option value="">เลือก</option></select></div>
+           <div class="col-md-4"><label class="form-label">ตำบล <span class="req-star">*</span></label><select id="subdistrict" class="form-select" required onchange="chSub()" disabled><option value="">เลือก</option></select></div>
+           <div class="col-md-4"><label class="form-label">รหัสไปรษณีย์ <span class="req-star">*</span></label><input type="text" id="zipcode" class="form-control bg-light" readonly></div>
+        </div>
+
+        <h5 class="section-title">3. ข้อมูลครอบครัว</h5>
+        <div class="mb-3"><label class="form-label">สถานภาพบิดา-มารดา</label><select id="famStatus" class="form-select"><option>อยู่ด้วยกัน</option><option>หย่าร้าง</option><option>แยกกันอยู่</option><option>บิดาถึงแก่กรรม</option><option>มารดาถึงแก่กรรม</option></select></div>
+       
+       <div class="parent-card">
+           <div class="parent-header">ข้อมูลบิดา</div>
+           <div class="row g-2">
+             <div class="col-3">
+              <label>คำนำหน้า</label>
+                 <select id="f_prefix" class="form-select" onchange="toggleOther('f_prefix', 'f_prefix_other')">
+                    <option value="นาย">นาย</option>
+                    <option value="อื่นๆ">อื่นๆ</option>
+                   </select>
+                 <input type="text" id="f_prefix_other" class="form-control mt-2 hidden" placeholder="ระบุ">
+                </div>
+             <div class="col-4"><label>ชื่อ </label><input type="text" id="f_name" class="form-control text-only" ></div>
+             <div class="col-5"><label>นามสกุล </label><input type="text" id="f_lname" class="form-control text-only" ></div>
+             <div class="col-5"><label>อาชีพ </label><input type="text" id="f_job" class="form-control" ></div>
+             <div class="col-2"><label>อายุ</label><input type="number" id="f_age" class="form-control" placeholder="ปี"></div>
+             <div class="col-5"><label>เบอร์โทร </label><input type="text" id="f_phone" class="form-control num-only" placeholder="ตัวเลขเท่านั้น" maxlength="10" ></div>
+             <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" id="f_same" onchange="toggleAddr('f')"><label class="form-check-label" for="f_same">ที่อยู่เดียวกับนักเรียน</label></div></div>
+             <div class="col-12" id="f_addr_div" >
+                <div class="card bg-light border-0 p-3 mt-2">
+                    <label class="fw-bold mb-2 text-primary">ที่อยู่บิดา</label>
+                    <div class="row g-2">
+                        <div class="col-md-3 col-6"><input type="text" id="f_addr_no" class="form-control" placeholder="บ้านเลขที่"></div>
+                        <div class="col-md-3 col-6"><input type="text" id="f_addr_moo" class="form-control" placeholder="หมู่ที่"></div>
+                        <div class="col-md-6"><input type="text" id="f_addr_road" class="form-control" placeholder="ถนน/ซอย"></div>
+                        <div class="col-md-4"><select id="f_addr_prov" class="form-select" onchange="chProvP('f')"><option value="">เลือกจังหวัด</option></select></div>
+                        <div class="col-md-4"><select id="f_addr_dist" class="form-select" onchange="chDistP('f')" disabled><option value="">เลือกอำเภอ/เขต</option></select></div>
+                        <div class="col-md-4"><select id="f_addr_sub" class="form-select" onchange="chSubP('f')" disabled><option value="">เลือกตำบล/แขวง</option></select></div>
+                        <div class="col-md-12"><input type="text" id="f_addr_zip" class="form-control bg-white" placeholder="รหัสไปรษณีย์" readonly></div>
+                    </div>
+                </div>
+             </div>
+           </div>
+        </div>
+
+        <div class="parent-card">
+           <div class="parent-header">ข้อมูลมารดา</div>
+           <div class="row g-2">
+             <div class="col-3"><label>คำนำหน้า</label><select id="m_prefix" class="form-select"><option>นาง</option><option>นางสาว</option></select></div>
+             <div class="col-4"><label>ชื่อ </label><input type="text" id="m_name" class="form-control text-only" ></div>
+             <div class="col-5"><label>นามสกุล </label><input type="text" id="m_lname" class="form-control text-only" ></div>
+             <div class="col-5"><label>อาชีพ </label><input type="text" id="m_job" class="form-control" ></div>
+             <div class="col-2"><label>อายุ</label><input type="number" id="m_age" class="form-control" placeholder="ปี"></div>
+             <div class="col-5"><label>เบอร์โทร </label><input type="text" id="m_phone" class="form-control num-only" placeholder="ตัวเลขเท่านั้น" maxlength="10" ></div>
+             <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" id="m_same" onchange="toggleAddr('m')"><label class="form-check-label" for="m_same">ที่อยู่เดียวกับนักเรียน</label></div></div>
+             <div class="col-12" id="m_addr_div" >
+                <div class="card bg-light border-0 p-3 mt-2">
+                    <label class="fw-bold mb-2 text-primary">ที่อยู่มารดา</label>
+                    <div class="row g-2">
+                        <div class="col-md-3 col-6"><input type="text" id="m_addr_no" class="form-control" placeholder="บ้านเลขที่"></div>
+                        <div class="col-md-3 col-6"><input type="text" id="m_addr_moo" class="form-control" placeholder="หมู่ที่"></div>
+                        <div class="col-md-6"><input type="text" id="m_addr_road" class="form-control" placeholder="ถนน/ซอย"></div>
+                        <div class="col-md-4"><select id="m_addr_prov" class="form-select" onchange="chProvP('m')"><option value="">เลือกจังหวัด</option></select></div>
+                        <div class="col-md-4"><select id="m_addr_dist" class="form-select" onchange="chDistP('m')" disabled><option value="">เลือกอำเภอ/เขต</option></select></div>
+                        <div class="col-md-4"><select id="m_addr_sub" class="form-select" onchange="chSubP('m')" disabled><option value="">เลือกตำบล/แขวง</option></select></div>
+                        <div class="col-md-12"><input type="text" id="m_addr_zip" class="form-control bg-white" placeholder="รหัสไปรษณีย์" readonly></div>
+                    </div>
+                </div>
+             </div>
+           </div>
+        </div>
+
+        <div class="parent-card">
+           <div class="parent-header">ข้อมูลผู้ปกครอง</div>
+           <div class="mb-2 bg-light p-2 rounded"><small class="text-muted"><i class="bi bi-info-circle me-1"></i>คัดลอกข้อมูลจาก: <input type="checkbox" id="use_f" onchange="copyP('f')"> บิดา | <input type="checkbox" id="use_m" onchange="copyP('m')"> ใช้ข้อมูลมารดา</small></div>
+           <div class="row g-2">
+             <div class="col-3"><label>คำนำหน้า</label><select id="g_prefix" class="form-select"><option>นาย</option><option>นาง</option><option>นางสาว</option></select></div>
+             <div class="col-4"><label>ชื่อ </label><input type="text" id="g_name" class="form-control text-only" ></div>
+             <div class="col-5"><label>นามสกุล </label><input type="text" id="g_lname" class="form-control text-only" ></div>
+            <div class="col-3">
+                     <label>เกี่ยวข้อง</label>
+                          <select id="g_rel" class="form-select"  onchange="toggleOther('g_rel', 'g_rel_other')">
+                              <option value="">เลือก</option>
+                              <option value="บิดา">บิดา</option>
+                              <option value="มารดา">มารดา</option>
+                              <option value="ปู่/ย่า/ตา/ยาย">ปู่/ย่า/ตา/ยาย</option>
+                              <option value="พี่/ป้า/น้า/อา">พี่/ป้า/น้า/อา</option>
+                              <option value="อื่นๆ">อื่นๆ (โปรดระบุ)</option>
+                          </select>
+                       <input type="text" id="g_rel_other" class="form-control mt-2 hidden" placeholder="ระบุความเกี่ยวข้อง">
+                  </div>
+             <div class="col-3"><label>อาชีพ</label><input type="text" id="g_job" class="form-control" ></div>
+             <div class="col-2"><label>อายุ</label><input type="number" id="g_age" class="form-control"></div>
+             <div class="col-4"><label>เบอร์โทร</label><input type="text" id="g_phone" class="form-control num-only" maxlength="10" ></div>
+             <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" id="g_same" onchange="toggleAddr('g')"><label class="form-check-label" for="g_same">ที่อยู่เดียวกับนักเรียน</label></div></div>
+             <div class="col-12" id="g_addr_div" >
+                <div class="card bg-light border-0 p-3 mt-2">
+                    <label class="fw-bold mb-2 text-primary">ที่อยู่ผู้ปกครอง</label>
+                    <div class="row g-2">
+                         <div class="col-md-3 col-6"><input type="text" id="g_addr_no" class="form-control" placeholder="บ้านเลขที่"></div>
+                        <div class="col-md-3 col-6"><input type="text" id="g_addr_moo" class="form-control" placeholder="หมู่ที่"></div>
+                        <div class="col-md-6"><input type="text" id="g_addr_road" class="form-control" placeholder="ถนน/ซอย"></div>
+                        <div class="col-md-4"><select id="g_addr_prov" class="form-select" onchange="chProvP('g')"><option value="">เลือกจังหวัด</option></select></div>
+                        <div class="col-md-4"><select id="g_addr_dist" class="form-select" onchange="chDistP('g')" disabled><option value="">เลือกอำเภอ/เขต</option></select></div>
+                        <div class="col-md-4"><select id="g_addr_sub" class="form-select" onchange="chSubP('g')" disabled><option value="">เลือกตำบล/แขวง</option></select></div>
+                        <div class="col-md-12"><input type="text" id="g_addr_zip" class="form-control bg-white" placeholder="รหัสไปรษณีย์" readonly></div>
+                    </div>
+                </div>
+             </div>
+           </div>
+        </div>
+
+        <h5 class="section-title">4. หลักฐานการสมัคร</h5>
+        <div class="mb-3">
+            <label class="form-label">รูปถ่ายนักเรียน (หน้าตรง) <span class="req-star">*</span></label>
+            <input type="file" id="photoFile" class="form-control" accept="image/*" onchange="readF(this,'photo64')">
+            <input type="hidden" id="photo64">
+            <div id="oldPhoto" class="hidden mt-2"></div>
+            <div id="newPhotoPreview" class="mt-2 text-center" style="display:none;">
+             <small class="text-success d-block mb-1">รูปถ่ายที่จะอัปโหลด:</small>
+              <img id="imgPreview" src="" class="img-thumbnail" style="max-height: 180px;">
+            </div>
+        </div>
+        <div id="ts-box" class="mb-4">
+            <label class="form-label">ใบรับรองผลการเรียน (ปพ.1) 5 ภาคเรียน  <span class="req-star">*</span></label>
+            <input type="file" id="tsFile" class="form-control" accept="image/*,application/pdf" onchange="readF(this,'ts64')">
+            <input type="hidden" id="ts64">
+            <div id="oldTs" class="hidden mt-2"></div>
+        </div>
+        <div id="conduct-box" class="mb-4">
+            <label class="form-label">ใบรับรองความประพฤติ <span class="req-star">*</span></label>
+            <input type="file" id="conductFile" class="form-control" accept="image/*,application/pdf" onchange="readF(this,'conduct64')">
+            <input type="hidden" id="conduct64">
+         <div id="oldConduct" class="hidden mt-2"></div>
+        </div>
+        <hr class="my-4">
+        <button type="submit" id="submitBtn" class="btn btn-primary w-100 py-3 fs-5 rounded-pill shadow">ยืนยันการสมัคร</button>
+      </form>
+    </div>
+
+    <div id="status-section" class="hidden text-center">
+      <h4 class="mt-3 fw-bold">ตรวจสอบสถานะ</h4>
+      <p class="text-muted">กรอกเลขบัตรประชาชน 13 หลัก</p>
+      <div class="digit-container mt-4 mb-4" id="checkIdCard-container"></div>
+      <input type="hidden" id="checkIdCard">
+      <button class="btn btn-primary px-5 rounded-pill" onclick="doCheck()"><i class="bi bi-search me-2"></i>ค้นหา</button>
+      <div id="status-result" class="mt-4"></div>
+      
+      <button class="btn btn-link text-muted mt-3" onclick="softReset()">กลับหน้าหลัก</button>
+    </div>
+
+    <div id="report-section" class="hidden">
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 pt-2">
+        <div class="mb-2 mb-md-0">
+          <h4 class="fw-bold text-dark mb-1"><i class="bi bi-person-lines-fill text-primary me-2"></i>รายชื่อผู้สมัคร</h4>
+          <small class="text-muted">ตรวจสอบสถานะการสมัครเรียน</small>
+        </div>
+        <button class="btn btn-secondary rounded-pill px-4" type="button" onclick="softReset()">
+          <i class="bi bi-arrow-left me-1"></i> กลับหน้าหลัก
+        </button>
+      </div>
+      
+      <div id="stat-loading" class="text-center py-5">
+         <div class="spinner-border text-primary" role="status"></div>
+         <div class="mt-2">กำลังโหลดข้อมูล...</div>
+      </div>
+
+      <div id="reportContent" class="hidden">
+        <div class="d-flex justify-content-center mb-4 bg-light p-1 rounded-pill border">
+            <button id="btn-m1" class="btn btn-primary rounded-pill w-50 fw-bold" onclick="switchTab('m1')"> ม.1 <span id="badge-m1" class="badge bg-white text-primary ms-1 rounded-pill">0</span> </button>
+            <button id="btn-m4" class="btn btn-light text-muted rounded-pill w-50 fw-bold" onclick="switchTab('m4')"> ม.4 <span id="badge-m4" class="badge bg-secondary text-white ms-1 rounded-pill">0</span> </button>
+        </div>
+        <div id="pane-m1" class="tab-content-area tab-active">
+          <div class="row g-3">
+             <div class="col-md-4">
+                <div class="card shadow-sm border-0 h-100">
+                   <div class="card-header bg-white fw-bold text-primary">ยอดสมัครตามแผนฯ</div>
+                   <div class="card-body p-2" id="stat-list-m1"></div>
+                </div>
+             </div>
+             <div class="col-md-8">
+                <div class="card shadow-sm border-0 h-100">
+                   <div class="card-header bg-white">
+                      <div class="row g-2">
+                         <div class="col-7"><input type="text" class="form-control form-control-sm rounded-pill bg-light" id="searchM1" placeholder="ค้นหาชื่อ..." onkeyup="filterTable('m1')"></div>
+                         <div class="col-5"><select class="form-select form-select-sm rounded-pill bg-light" id="filterPlanM1" onchange="filterTable('m1')"></select></div>
+                      </div>
+                   </div>
+                   <div class="table-responsive" style="max-height: 500px;">
+                      <table class="table table-hover align-middle mb-0">
+                         <thead class="table-head-fix sticky-top shadow-sm"><tr><th class="ps-3">ชื่อ-นามสกุล</th><th>แผนการเรียน</th><th class="text-center">สถานะ</th></tr></thead>
+                         <tbody id="list-body-m1"></tbody>
+                      </table>
+                   </div>
+                </div>
+             </div>
+          </div>
+        </div>
+        <div id="pane-m4" class="tab-content-area">
+          <div class="row g-3">
+             <div class="col-md-4">
+                <div class="card shadow-sm border-0 h-100">
+                   <div class="card-header bg-white fw-bold text-success">ยอดสมัครตามแผนฯ</div>
+                   <div class="card-body p-2" id="stat-list-m4"></div>
+                </div>
+             </div>
+             <div class="col-md-8">
+                <div class="card shadow-sm border-0 h-100">
+                   <div class="card-header bg-white">
+                      <div class="row g-2">
+                         <div class="col-7"><input type="text" class="form-control form-control-sm rounded-pill bg-light" id="searchM4" placeholder="ค้นหาชื่อ..." onkeyup="filterTable('m4')"></div>
+                         <div class="col-5"><select class="form-select form-select-sm rounded-pill bg-light" id="filterPlanM4" onchange="filterTable('m4')"></select></div>
+                      </div>
+                   </div>
+                   <div class="table-responsive" style="max-height: 500px;">
+                      <table class="table table-hover align-middle mb-0">
+                         <thead class="table-head-fix sticky-top shadow-sm"><tr><th class="ps-3">ชื่อ-นามสกุล</th><th>แผนการเรียน</th><th class="text-center">สถานะ</th></tr></thead>
+                         <tbody id="list-body-m4"></tbody>
+                      </table>
+                   </div>
+                </div>
+             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="admin-login-section" class="hidden">
+      <div class="col-md-6 col-lg-5 mx-auto card p-5 shadow border-0 mt-4 text-center">
+        <h4 class="fw-bold mb-4">สำหรับเจ้าหน้าที่</h4>
+        <input type="text" id="aUser" class="form-control mb-3 p-3" placeholder="ชื่อผู้ใช้งาน (Username)">
+        <input type="password" id="aPass" class="form-control mb-3 p-3" placeholder="รหัสผ่าน (Password)">
+        <button class="btn btn-dark w-100 py-3 rounded-pill" onclick="doLogin()">เข้าสู่ระบบ</button>
+        <button class="btn btn-link mt-3 text-muted" onclick="softReset()">กลับหน้าหลัก</button>
+      </div>
+    </div>
+
+    <div id="admin-dashboard" class="hidden">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+         <h3 class="fw-bold"><i class="bi bi-speedometer2 text-primary"></i> แดชบอร์ดผู้ดูแลระบบ</h3>
+         <div class="d-flex gap-2 btn-action-group">
+            <button onclick="exportToExcel()" class="btn btn-success shadow-sm"><i class="bi bi-file-earmark-excel"></i> ส่งออก Excel</button>
+            <button class="btn btn-outline-danger btn-sm" onclick="logout()"><i class="bi bi-box-arrow-right"></i> ออกจากระบบ</button>
+         </div>
+      </div>
+      
+      <div class="d-flex flex-column gap-2 my-3 p-3 bg-light rounded border">
+          <div class="form-check form-switch">
+             <input class="form-check-input" type="checkbox" id="toggleSpecial" onchange="toggleSystem('special', this)" style="cursor: pointer;">
+             <label class="form-check-label fw-bold text-primary" for="toggleSpecial">เปิดรับสมัคร ห้องเรียนพิเศษ</label>
+          </div>
+          <div class="form-check form-switch">
+             <input class="form-check-input" type="checkbox" id="toggleGeneral" onchange="toggleSystem('general', this)" style="cursor: pointer;">
+             <label class="form-check-label fw-bold text-success" for="toggleGeneral">เปิดรับสมัคร ห้องเรียนทั่วไป</label>
+          </div>
+      </div>
+
+      <div class="row mb-4 g-3">
+         <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+               <div class="card-body">
+                  <h6 class="text-muted mb-3">จำนวนผู้สมัครแยกตามแผนการเรียน</h6>
+                  <div class="chart-container" style="position: relative; height: 350px; overflow-y: auto; overflow-x: hidden; padding-right: 10px;">
+                      <canvas id="chartPlan"></canvas>
+                  </div>
+               </div>
+            </div>
+         </div>
+         <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+               <div class="card-body">
+                  <h6 class="text-muted mb-3">สถานะการสมัคร</h6>
+                  <canvas id="chartStatus" style="max-height:250px;"></canvas>
+               </div>
+            </div>
+         </div>
+      </div>
+
+      <div class="card shadow-sm border-0">
+         <div class="card-header bg-white py-3 border-bottom-0">
+             <div class="input-group">
+                 <span class="input-group-text bg-light border-0"><i class="bi bi-search"></i></span>
+                 <input type="text" id="aSearch" class="form-control bg-light border-0" placeholder="ค้นหาชื่อ, เลขบัตร, หรือสถานะ..." onkeyup="filterTbl()">
+             </div>
+         </div>
+         <div class="card border-0 shadow-sm mb-3">
+             <div class="card-body p-2">
+                 <div class="row g-2 align-items-center">
+                     <div class="col-12 col-lg-4">
+                        <div class="input-group">
+                           <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                           <input type="text" id="searchBox" class="form-control border-start-0 ps-0" placeholder="🔍 ค้นหาชื่อ หรือ เลขบัตร..." onkeyup="filterTbl()">
+                        </div>
+                     </div>
+                     <div class="col-6 col-lg-2">
+                        <select id="levelFilter" class="form-select" onchange="filterTbl()">
+                           <option value="all">📚 ทุกระดับชั้น</option>
+                           <option value="ม.1">มัธยมศึกษาปีที่ 1</option>
+                           <option value="ม.4">มัธยมศึกษาปีที่ 4</option>
+                        </select>
+                     </div>
+
+                      <div class="col-6 col-lg-3">
+                      <select id="planFilter" class="form-select" onchange="filterTbl()">
+                      <option value="all">📖 ทุกแผนการเรียน</option>
+                      </select>
+                      </div>
+
+
+                     <div class="col-6 col-lg-3">
+                        <select id="statusFilter" class="form-select" onchange="filterTbl()">
+                           <option value="all">⚡ สถานะ: ทั้งหมด</option>
+                           <option value="รอตรวจสอบ">⏳ รอตรวจสอบ</option>
+                           <option value="อนุมัติ">✅ อนุมัติแล้ว</option>
+                           <option value="ไม่ผ่าน">❌ ไม่ผ่าน/แก้ไข</option>
+                        </select>
+                     </div>
+                     <div class="col-6 col-lg-2">
+                         <select id="rowsFilter" class="form-select" onchange="filterTbl()">
+                             <option value="20">โชว์ 20 คน</option>
+                             <option value="50">โชว์ 50 คน</option>
+                             <option value="100">โชว์ 100 คน</option>
+                             <option value="all">โชว์ทั้งหมด</option>
+                         </select>
+                     </div>
+                     <div class="col-6 col-lg-1">
+                        <button class="btn btn-light w-100 text-muted border" onclick="resetFilter()"><i class="bi bi-arrow-counterclockwise"></i></button>
+                     </div>
+                 </div>
+             </div>
+         </div>
+
+         <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="aTable">
+                <thead class="table-light sticky-top" style="z-index: 1;">
+                   <tr>
+                      <th style="min-width: 250px;">ข้อมูลผู้สมัคร</th> <th style="min-width: 120px;">สถานะ</th>
+                      <th style="min-width: 150px;">จัดการ</th>
+                   </tr>
+                </thead>
+                <tbody>
+                   </tbody>
+            </table>
+         </div>
+      </div>
+    </div>
+
+  </div> <div class="modal fade" id="sModal">
+     <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+           <div class="modal-header bg-light">
+               <h5 class="modal-title fw-bold"><i class="bi bi-person-lines-fill me-2"></i>รายละเอียดผู้สมัคร</h5>
+               <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+           </div>
+           <div class="modal-body p-4" id="mBody"></div>
+           <div class="modal-footer bg-light">
+               <button class="btn btn-outline-dark me-auto" onclick="window.print()"><i class="bi bi-printer"></i> พิมพ์</button>
+               <div class="d-flex gap-2">
+                   <button class="btn btn-warning" onclick="upSt('ให้ปรับปรุงข้อมูล')">แจ้งแก้ไข</button>
+                   <button class="btn btn-danger" onclick="upSt('ไม่ผ่านการคัดเลือก')">ปฏิเสธ</button>
+                   <button class="btn btn-success px-4" onclick="upSt('อนุมัติ')">อนุมัติ</button>
+               </div>
+           </div>
+        </div>
+     </div>
+  </div>
+
+  <div class="modal fade" id="statModal">
+     <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+           <div class="modal-header bg-primary text-white">
+               <h5 class="modal-title fw-bold"><i class="bi bi-bar-chart-fill me-2"></i>รายงานสถิติการรับสมัคร</h5>
+               <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+           </div>
+           <div class="modal-body"><canvas id="statChartFull"></canvas></div>
+        </div>
+     </div>
+  </div>
+  <footer class="text-center mt-4 mb-5" style="opacity: 0.8;">
+  <p class="mb-0 text-secondary" style="font-size: 0.9rem;">
+    &copy; 2026 ระบบรับสมัครนักเรียนออนไลน์
+  </p>
+  <p class="mb-0 text-muted" style="font-size: 0.85rem;">
+    พัฒนาโดย <span class="fw-bold text-primary">คุณครูวิษณุ แจ่มปรีชา</span>
+  </p>
+</footer>
+
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    let addrDB=[], allSt=[], curIdx=null, aRole=0, aName="";
+    let myModal = null; // Detail Modal
+    let statModal = null; // Stat Modal
+    let cPlan=null, cStatus=null; // Charts
+
+
+    const el = (id) => document.getElementById(id);
+    const show = (id) => el(id).classList.remove('hidden');
+    const hide = (id) => el(id).classList.add('hidden');
    
-    if(fd.photoFile && fd.photoFile.data) photoUrl = uploadFile(fd.photoFile, CONFIG.FOLDER_ID_PHOTO, appId+"_Photo");
-    if(fd.transcriptFile && fd.transcriptFile.data) transUrl = uploadFile(fd.transcriptFile, CONFIG.FOLDER_ID_TRANSCRIPT, appId+"_Transcript");
-    if(fd.conductFile && fd.conductFile.data) {
-      conductUrl = uploadFile(fd.conductFile, CONFIG.FOLDER_ID_CONDUCT, appId+"_Conduct"); 
-    }
-
-    const addr = `${fd.addrNo} หมู่ ${fd.addrMoo} ซอย ${fd.addrSoi} ถนน ${fd.addrRoad} จ.${fd.province} อ.${fd.district} ต.${fd.subdistrict} ${fd.zipcode}`;
-    const status = rowIndex ? "รอตรวจสอบ (แก้ไขแล้ว)" : "รอตรวจสอบ";
-    const f = fd.father || {}; 
-    const m = fd.mother || {}; 
-    const g = fd.guardian || {};
-
-    const rawAddr = JSON.stringify({
-       no: fd.addrNo, moo: fd.addrMoo, soi: fd.addrSoi, road: fd.addrRoad,
-       prov: fd.province, dist: fd.district, sub: fd.subdistrict, zip: fd.zipcode
+    function loading(o) { o ? show('loading') : hide('loading'); }
+    function alertErr(m) { loading(0); Swal.fire({icon:'error', title:'เกิดข้อผิดพลาด', text:m}); }
+   
+   // แก้ไขฟังก์ชันนี้ (เพิ่ม 'report-section' เข้าไปในรายการที่ต้องซ่อน)
+// 1. ฟังก์ชันจัดการหน้า (ต้องมี 'report-section' ในรายการ ไม่งั้นกดไม่ไป)
+function showSection(id) {
+    // รายชื่อหน้าทั้งหมดที่มีในระบบ
+    const allSections = ['home-section', 'form-section', 'status-section', 'admin-login-section', 'admin-dashboard', 'report-section'];
+    
+    // ซ่อนทุกหน้า
+    allSections.forEach(secId => {
+        const el = document.getElementById(secId);
+        if (el) el.classList.add('hidden');
     });
 
-    // --- [จุดที่ 4] เพิ่มตัวแปรใหม่เข้าไปใน rowData ---
-    const rowData = [
-      fd.applyType, status, "", fd.level, fd.plan,
-      fd.prefix, fd.firstname, fd.lastname, 
-      
-      // >>> เพิ่ม 4 ค่านี้ <<<
-      fd.firstnameEn, fd.lastnameEn, fd.oldSchoolName, fd.oldSchoolProvince,
-      // --------------------
+    // แสดงหน้าเป้าหมาย
+    const target = document.getElementById(id);
+    if (target) target.classList.remove('hidden');
 
-      "'"+fd.dob, fd.nationality, fd.religion, "'"+fd.idCard, "'"+fd.phone,
-      addr, fd.famStatus,
-      f.prefix, f.name, f.lname, f.job, f.age, "'"+f.phone, f.addr,
-      m.prefix, m.name, m.lname, m.job, m.age, "'"+m.phone, m.addr,
-      g.prefix, g.name, g.lname, g.rel, g.job, g.age, "'"+g.phone, g.addr, 
-      photoUrl, transUrl, conductUrl,
-      rawAddr 
-    ];
-
-    if(rowIndex) {
-      sheet.getRange(rowIndex, 3, 1, rowData.length).setValues([rowData]);
-      return { success: true, message: "อัปเดตข้อมูลการสมัครเรียบร้อยแล้ว", appId: appId };
-    } else {
-      sheet.appendRow([timestamp, appId, ...rowData]);
-      return { success: true, message: "ส่งใบสมัครเรียบร้อยแล้ว เลขที่อ้างอิง: " + appId, appId: appId };
-    }
-
-  } catch(e) { 
-    return { success: false, message: e.message }; 
-  } finally { 
-    lock.releaseLock(); 
-  }
+    // จัดการ Header (ถ้ามี)
+    const header = document.getElementById('main-header');
+    if (header) header.classList.toggle('hidden', id === 'admin-dashboard');
 }
 
-
-function checkStatus(idCard) {
-  const sheet = getSheet(CONFIG.SHEET_NAME_DATA);
-  const data = sheet.getDataRange().getValues();
-  
-  // ค้นหาจากล่างขึ้นบน
-  for(let i=data.length-1; i>=1; i--) {
-     if(String(data[i][17]).replace(/'/g,'').trim() === String(idCard).trim()) {
-        const safeData = data[i].map(c => (c instanceof Date) ? formatDate(c) : String(c));
-        
-        return {
-           found: true, 
-           name: data[i][8]+" "+data[i][9], 
-           status: data[i][3], 
-           reason: data[i][4], 
-           applyType: data[i][2],
-           seatNo: data[i][47], 
-           fullData: (data[i][3]==='ให้ปรับปรุงข้อมูล') ? safeData : null
-        };
-     }
-  }
-  return { found: false };
+// 2. ฟังก์ชันกลับหน้าหลัก (Reset)
+function softReset() {
+    showSection('home-section'); // เรียกฟังก์ชันข้างบนให้ทำงาน
+    
+    // ล้างค่าฟอร์มต่างๆ (ตามโค้ดเดิมของคุณ)
+    const form = document.getElementById('appForm');
+    if(form) form.reset();
+    
+    // ล้างค่าอื่นๆ
+    ['idCard-container', 'phone-container', 'checkIdCard-container'].forEach(id => setDig(id, ''));
+    if(document.getElementById('province')) document.getElementById('province').innerHTML = '<option value="">เลือก</option>';
+    ['district', 'subdistrict', 'status-result', 'oldPhoto', 'oldTs'].forEach(id => {
+       const el = document.getElementById(id);
+       if(el) el.innerHTML = '';
+    });
+    
+    if(document.getElementById('isEditMode')) document.getElementById('isEditMode').value = 'false';
+    if(document.getElementById('checkIdCard')) document.getElementById('checkIdCard').value = '';
+    if(document.getElementById('newPhotoPreview')) document.getElementById('newPhotoPreview').style.display = 'none';
+    
+    aRole = 0; aName = ""; 
+    if(document.getElementById('aUser')) document.getElementById('aUser').value = "";
+    if(document.getElementById('aPass')) document.getElementById('aPass').value = "";
 }
 
-
-function getAdminData() {
-  try {
-    // 1. เชื่อมต่อ Sheet
-    var sheet = getSheet(CONFIG.SHEET_NAME_DATA); 
+// 3. ฟังก์ชันสลับแท็บ ม.1 / ม.4 (Manual Switch)
+function switchTab(mode) {
+    // รีเซ็ตปุ่มทั้งหมดเป็นสีเทา
+    document.getElementById('btn-m1').className = 'btn btn-light text-muted rounded-pill w-50 fw-bold';
+    document.getElementById('btn-m4').className = 'btn btn-light text-muted rounded-pill w-50 fw-bold';
     
-    // ดึงข้อมูลทั้งหมดเป็น Text
-    var data = sheet.getDataRange().getDisplayValues();
+    // รีเซ็ตเนื้อหาทั้งหมดให้ซ่อน
+    document.getElementById('pane-m1').classList.remove('tab-active');
+    document.getElementById('pane-m4').classList.remove('tab-active');
+
+    // เปิดปุ่มที่เลือกเป็นสีน้ำเงิน
+    document.getElementById('btn-' + mode).className = 'btn btn-primary rounded-pill w-50 fw-bold shadow-sm';
     
-    if (data.length <= 1) {
-      return { 
-        success: true, 
-        students: [], 
-        stats: { total:0, approved:0, pending:0, rejected:0 } 
-      };
-    }
+    // เปิดเนื้อหาที่เลือก
+    document.getElementById('pane-' + mode).classList.add('tab-active');
+}
 
-    data.shift(); // ตัดหัวตารางออก
+// 4. ฟังก์ชันเรียกดูข้อมูล (Render)
+function showReport() {
+    showSection('report-section');
+    switchTab('m1'); // เริ่มต้นที่ ม.1 เสมอ
+    
+    document.getElementById('stat-loading').classList.remove('hidden');
+    document.getElementById('reportContent').classList.add('hidden');
+    
+    google.script.run.withSuccessHandler(renderReport).getPublicReport();
+}
 
-    // 2. แปลงข้อมูล (จุดสำคัญอยู่ตรงนี้!)
-    var students = data.map(function(row, i) {
-      
-      return {
-        rowIndex: i + 2,
-        timestamp: row[0],
-        appId: row[1],
-        status: row[3],
-        level: row[5],
-        plan: row[6],
-        name: row[7] + row[8] + " " + row[9], 
-        idCard: String(row[13]).replace(/'/g, ''),
-        
-        phone: String(row[14]).replace(/'/g, ''),
-      
-        photo: row[39],      
-        transcript: row[40], 
-        conduct: row[41],
-        // ----------------------------------------
+function renderReport(data) {
+    document.getElementById('stat-loading').classList.add('hidden');
+    document.getElementById('reportContent').classList.remove('hidden');
 
-        fullData: row
-      };
-    }).reverse();
+    if (data.error) { Swal.fire('แจ้งเตือน', data.error, 'error'); return; }
 
-    // 3. คำนวณสถิติ
-    var stats = {
-      total: students.length,
-      approved: students.filter(function(s) { return s.status === 'อนุมัติ'; }).length,
-      pending: students.filter(function(s) { return s.status && s.status.includes('รอตรวจสอบ'); }).length,
-      rejected: students.filter(function(s) { return s.status && s.status.includes('ไม่ผ่าน'); }).length
+    let m1 = { list: [], stats: {} };
+    let m4 = { list: [], stats: {} };
+    let c1 = 0, c4 = 0;
+
+    data.list.forEach(item => {
+        if (item.level.includes("1")) {
+            m1.list.push(item);
+            m1.stats[item.plan] = (m1.stats[item.plan] || 0) + 1;
+            c1++;
+        } else if (item.level.includes("4")) {
+            m4.list.push(item);
+            m4.stats[item.plan] = (m4.stats[item.plan] || 0) + 1;
+            c4++;
+        }
+    });
+
+    document.getElementById('badge-m1').innerText = c1;
+    document.getElementById('badge-m4').innerText = c4;
+
+    const renderTab = (obj, type) => {
+        // วาดสถิติ
+        let statHtml = '';
+        const plans = Object.keys(obj.stats).sort();
+        const selectBox = document.getElementById(`filterPlan${type === 'm1' ? 'M1' : 'M4'}`);
+        selectBox.innerHTML = '<option value="">ทุกแผนการเรียน</option>';
+
+        plans.forEach(plan => {
+            selectBox.innerHTML += `<option value="${plan}">${plan}</option>`;
+            statHtml += `
+            <div class="stat-item d-flex justify-content-between align-items-center p-2 bg-light rounded mb-2">
+                <div class="small fw-bold text-dark text-wrap me-2">${plan}</div>
+                <span class="badge bg-white text-primary border rounded-pill">${obj.stats[plan]}</span>
+            </div>`;
+        });
+        document.getElementById(`stat-list-${type}`).innerHTML = statHtml || '<div class="text-center text-muted p-2 border border-dashed rounded">ไม่มีข้อมูล</div>';
+
+        // วาดตาราง
+        let listHtml = '';
+        obj.list.forEach(s => {
+            let statusClass = 'bg-light text-secondary border';
+            if (s.status.includes('อนุมัติ')) statusClass = 'bg-success bg-opacity-10 text-success border-success';
+            else if (s.status.includes('ไม่ผ่าน') || s.status.includes('แก้ไข')) statusClass = 'bg-danger bg-opacity-10 text-danger border-danger';
+            else if (s.status.includes('รอ')) statusClass = 'bg-warning bg-opacity-10 text-dark border-warning';
+
+            listHtml += `
+            <tr>
+                <td class="ps-3">
+                    <div class="fw-bold text-dark">${s.fullname}</div>
+                    <div class="d-md-none text-muted small mt-1"><i class="bi bi-journal-bookmark"></i> ${s.plan}</div>
+                </td>
+                <td class="d-none d-md-table-cell text-secondary"><small>${s.plan}</small></td>
+                <td class="text-center"><span class="status-pill ${statusClass}">${s.status}</span></td>
+            </tr>`;
+        });
+        document.getElementById(`list-body-${type}`).innerHTML = listHtml || '<tr><td colspan="3" class="text-center py-4 text-muted">ยังไม่มีรายชื่อ</td></tr>';
     };
 
-    return { success: true, students: students, stats: stats };
+    renderTab(m1, 'm1');
+    renderTab(m4, 'm4');
+}
 
-  } catch (e) {
-    Logger.log("Error getAdminData: " + e.toString());
-    return { success: false, message: "เกิดข้อผิดพลาดที่ Server: " + e.toString() };
-  }
+// 5. ฟังก์ชันกรองข้อมูล (Filter)
+function filterTable(type) {
+    const txt = document.getElementById(`search${type === 'm1' ? 'M1' : 'M4'}`).value.toLowerCase();
+    const plan = document.getElementById(`filterPlan${type === 'm1' ? 'M1' : 'M4'}`).value;
+    const rows = document.getElementById(`list-body-${type}`).getElementsByTagName('tr');
+
+    for (let row of rows) {
+        if(row.cells.length < 2) continue;
+        const name = row.cells[0].textContent.toLowerCase();
+        const planTxt = row.textContent; 
+        row.style.display = (name.includes(txt) && (plan === "" || planTxt.includes(plan))) ? "" : "none";
+    }
 }
 
 
-function updateStudentStatus(ri, st, re, by) {
-  const lock = LockService.getScriptLock();
-  if (lock.tryLock(10000)) {
-    try {
-      // --- [จุดสำคัญ] เรียกใช้ไฟล์จาก ID ใน CONFIG (แก้ปัญหา Error: null) ---
-      const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID); 
-      // -------------------------------------------------------------
-
-      const sheet = ss.getSheetByName(CONFIG.SHEET_NAME_DATA);
-      if (!sheet) throw new Error("ไม่พบแผ่นชีต: " + CONFIG.SHEET_NAME_DATA);
-
-      // 1. บันทึกสถานะลงแผ่นหลัก
-      sheet.getRange(ri, 4).setValue(st); 
-      sheet.getRange(ri, 5).setValue(re + " (" + by + ")");
-      SpreadsheetApp.flush(); // บันทึกทันที
-
-      // 2. ระบบรันเลขที่นั่งสอบ (ทำงานเฉพาะเมื่อกด 'อนุมัติ')
-      if (st === 'อนุมัติ') {
-         const COL_EXAM_ID = 48; // คอลัมน์ AR (เลขที่นั่งสอบ)
-         
-         // ตรวจสอบและสร้างคอลัมน์เพิ่มอัตโนมัติ (ถ้าไม่พอ)
-         if (sheet.getMaxColumns() < COL_EXAM_ID) {
-           sheet.insertColumnsAfter(sheet.getMaxColumns(), COL_EXAM_ID - sheet.getMaxColumns());
-         }
-
-         const rowValues = sheet.getRange(ri, 1, 1, sheet.getLastColumn()).getValues()[0];
-         const currentExamId = (rowValues.length >= COL_EXAM_ID) ? rowValues[COL_EXAM_ID - 1] : "";
-
-         // ถ้ายังไม่มีเลขสอบ ให้สร้างใหม่
-         if (!currentExamId) {
-            // ดึงข้อมูล (Index: 0=Time, 1=AppID, ... 5=Level, 6=Plan)
-            const appId = rowValues[1];
-            const sLevel = String(rowValues[5] || ""); 
-            const sPlan = String(rowValues[6] || "");
-            const sPrefix = rowValues[7] || "";
-            const sName = rowValues[8] || "";
-            const sLname = rowValues[9] || "";
-
-            let codePrefix = "";
-            let targetSheetName = "";
-
-            // ตรวจสอบเงื่อนไข (เพิ่มคำค้นหาภาษาไทยให้แล้ว)
-            if (sLevel.includes("1")) {
-               targetSheetName = "เลขที่นั่งสอบห้องเรียนพิเศษ ม.1";
-               if (sPlan.includes("SMTE") || sPlan.includes("วิทย์") || sPlan.includes("คณิต")) codePrefix = "11";
-               else if (sPlan.includes("IEP") || sPlan.includes("อังกฤษ")) codePrefix = "12";
-            } else if (sLevel.includes("4")) {
-               targetSheetName = "เลขที่นั่งสอบห้องเรียนพิเศษ ม.4";
-               if (sPlan.includes("SMTE") || sPlan.includes("วิทย์") || sPlan.includes("คณิต")) codePrefix = "41";
-               else if (sPlan.includes("IEP") || sPlan.includes("อังกฤษ")) codePrefix = "42";
-            }
-
-            // ถ้าเข้าเงื่อนไข ให้ดำเนินการบันทึก
-            if (codePrefix && targetSheetName) {
-               const targetSheet = ss.getSheetByName(targetSheetName);
-               if (!targetSheet) throw new Error("ไม่พบแผ่นชีตชื่อ: " + targetSheetName);
-
-               // หาเลขลำดับล่าสุด
-               const allExamData = targetSheet.getDataRange().getValues();
-               let maxNum = 0;
-               for (let i = 1; i < allExamData.length; i++) {
-                  let eid = String(allExamData[i][0] || "");
-                  if (eid.startsWith(codePrefix)) {
-                     let num = parseInt(eid.substring(2)) || 0;
-                     if (num > maxNum) maxNum = num;
-                  }
-               }
-               
-               // สร้างเลขใหม่
-               let newId = codePrefix + String(maxNum + 1).padStart(3, '0');
-               
-               // บันทึกลงแผ่นหลัก
-               sheet.getRange(ri, COL_EXAM_ID).setValue(newId);
-               // บันทึกลงแผ่นแยก (ตามระดับชั้น)
-               targetSheet.appendRow([newId, appId, sPrefix, sName, sLname, sPlan]);
-               
-               return { success: true, message: "บันทึกและออกเลขสอบ " + newId + " เรียบร้อย" };
-            }
-         }
+    // --- Strict Validation Listeners ---
+    document.addEventListener('input', function(e) {
+      // 1. ช่องเบอร์โทร / เลขบัตร (คลาส num-only) -> ห้ามพิมพ์ตัวอักษร
+      if (e.target.classList.contains('num-only')) {
+         e.target.value = e.target.value.replace(/[^0-9]/g, '');
       }
-      return { success: true, message: "บันทึกสถานะเรียบร้อย (ไม่ได้ออกเลขสอบ)" };
+      // 2. ช่องชื่อ (คลาส text-only) -> ห้ามพิมพ์ตัวเลข
+      if (e.target.classList.contains('text-only')) {
+         e.target.value = e.target.value.replace(/[0-9]/g, '');
+      }
+    });
 
-    } catch (e) {
-      throw new Error("Error: " + e.message);
-    } finally {
-      lock.releaseLock();
-    }
-  }
-  throw new Error("ระบบทำงานหนัก กรุณาลองใหม่");
-}
 
-function uploadFile(d, fid, fname) {
-  try {
-    var folder = DriveApp.getFolderById(fid);
-    var blob = Utilities.newBlob(Utilities.base64Decode(d.data), d.mimeType, fname);
-    var file = folder.createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    return "https://drive.google.com/uc?export=view&id=" + file.getId();
-  } catch(e) {
-    return "Error Uploading";
-  }
-}
-
-// --- ส่วนที่เพิ่มใหม่สำหรับหน้าตรวจสอบรายชื่อ ---
-function getPublicReport() {
-  try {
-    const sheet = getSheet(CONFIG.SHEET_NAME_DATA);
-    // ดึงข้อมูลทั้งหมด
-    const data = sheet.getDataRange().getDisplayValues();
-    
-    // ถ้ามีแต่หัวข้อ (ข้อมูลน้อยกว่า 2 บรรทัด) ให้ส่งค่าว่างกลับไป
-    if (data.length < 2) return { list: [] };
-
-    let list = [];
-    
-    // เริ่มวนลูปตั้งแต่แถวที่ 2 (Index 1) เป็นต้นไป
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-
-      // Index 5 = ระดับชั้น (Col F), Index 6 = แผน (Col G), Index 8 = ชื่อ (Col I)
-      if (!row[8]) continue; // ถ้าไม่มีชื่อให้ข้าม
-
-      list.push({
-        level: row[5] || "-",       
-        plan: row[6] || "-",        
-        fullname: `${row[7] || ''}${row[8]} ${row[9]}`, // คำนำหน้า+ชื่อ+สกุล
-        status: row[3] || "รอตรวจสอบ" // สถานะ (Col D)
-      });
+    // --- Helper: Convert Drive Link to Thumbnail ---
+    function getDirectImg(url) {
+       if(!url || url==='-') return 'https://via.placeholder.com/150?text=No+Image';
+       try {
+         let id = "";
+         if(url.indexOf('id=') > -1) id = url.split('id=')[1].split('&')[0];
+         else if(url.indexOf('/d/') > -1) id = url.split('/d/')[1].split('/')[0];
+         if(id) return "https://drive.google.com/thumbnail?id=" + id + "&sz=w1000";
+       } catch(e) { }
+       return url;
     }
 
-    return { list: list };
+        
 
-  } catch (e) {
-    return { error: "เกิดข้อผิดพลาด: " + e.message };
+    // --- Init ---
+    window.onload = () => {
+       mkDig('idCard-container','idCard',13);
+       mkDig('phone-container','phone',10);
+       mkDig('checkIdCard-container','checkIdCard',13);
+    };
+    // ฟังก์ชันสร้างช่องกรอก (ฉบับปรับปรุง รองรับ G และถอยหลังได้)
+    // ฟังก์ชันสร้างช่องกรอก 13 หลัก (ใช้ได้ทั้งหน้าสมัคร และ หน้าตรวจสอบสถานะ)
+// ฟังก์ชันสร้างช่องกรอก (ฉบับอัปเกรด: G ได้แค่ช่องแรก + ช่องหลังเป็นแป้นตัวเลข)
+function mkDig(cid, hid, n) {
+   const c = document.getElementById(cid);
+   if (!c) return;
+   c.innerHTML = '';
+   
+   // เช็คว่าเป็นช่องบัตรประชาชนหรือไม่
+   const isID = cid.toLowerCase().includes('idcard');
+
+   for (let i = 0; i < n; i++) {
+     let ip = document.createElement('input');
+     ip.className = 'digit-box';
+     ip.maxLength = 1;
+     
+     // [จุดที่แก้ 1] ตั้งค่าแป้นพิมพ์
+     // - ถ้าเป็นช่องแรกของบัตร (i==0) -> ให้ใช้แป้น text (เพื่อพิมพ์ G)
+     // - ช่องอื่นๆ หรือเบอร์โทร -> ให้ใช้แป้น numeric (ตัวเลขล้วน พิมพ์ง่าย)
+     if (isID && i === 0) {
+        ip.setAttribute('inputmode', 'text');
+     } else {
+        ip.setAttribute('inputmode', 'numeric');
+     }
+     
+     ip.oninput = (e) => {
+        let val = e.target.value;
+        
+        if (isID) {
+            // [จุดที่แก้ 2] ล็อคการพิมพ์ G
+            if (i === 0) {
+                // ช่องแรก: อนุญาตเลข 0-9 และ G, g
+                val = val.replace(/[^0-9Gg]/g, '').toUpperCase();
+            } else {
+                // ช่อง 2-13: อนุญาตเฉพาะตัวเลขเท่านั้น (ห้ามพิมพ์ G)
+                val = val.replace(/[^0-9]/g, '');
+            }
+        } else {
+            // กรณีเบอร์โทร: ตัวเลขเท่านั้นทุกช่อง
+            val = val.replace(/[^0-9]/g, '');
+        }
+        
+        e.target.value = val;
+        
+        // พิมพ์เสร็จแล้วเด้งไปช่องถัดไป
+        if (val && i < n - 1) c.children[i + 1].focus();
+        
+        upDig(cid, hid);
+     };
+     
+     // กด Backspace เพื่อถอยกลับ
+     ip.onkeydown = (e) => {
+        if (e.key === 'Backspace' && !e.target.value && i > 0) c.children[i - 1].focus();
+     };
+     
+     c.appendChild(ip);
+   }
+}
+// ฟังก์ชันตรวจสอบความถูกต้อง (รองรับทั้ง G และเลข 13 หลัก)
+function validateThaiID(id) {
+  if (!id || id.length !== 13) return false;
+  id = id.toUpperCase();
+
+  // กรณีรหัส G (G + 12 ตัวเลข) -> ให้ผ่านเลย ไม่ต้องคำนวณสูตร
+  if (id.charAt(0) === 'G') {
+      return /^\d{12}$/.test(id.substring(1));
+  }
+
+  // กรณีบัตรคนไทย (13 ตัวเลข) -> คำนวณสูตร
+  if (!/^\d{13}$/.test(id)) return false;
+
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    sum += parseFloat(id.charAt(i)) * (13 - i);
+  }
+  const checkDigit = (11 - sum % 11) % 10;
+  return checkDigit === parseFloat(id.charAt(12));
+}
+    function upDig(cid,hid){ let v=''; document.querySelectorAll(`#${cid} input`).forEach(x=>v+=x.value); el(hid).value=v; }
+    function setDig(cid,v){ document.querySelectorAll(`#${cid} input`).forEach((x,i)=>x.value=v[i]||''); upDig(cid,cid.replace('-container','')); }
+
+
+    function openForm(type, ed=null) {
+    loading(1); 
+    el('appForm').reset(); 
+    setDig('idCard-container',''); 
+    setDig('phone-container','');
+    
+    // ตั้งค่าโหมดแก้ไข
+    const isEd = !!ed; 
+    el('isEditMode').value = isEd;
+    el('submitBtn').innerText = isEd ? "บันทึกการแก้ไขข้อมูล" : "ยืนยันการสมัคร";
+    el('applyType').value = isEd ? ed[0] : (type==='special'?'ห้องเรียนพิเศษ':'ห้องเรียนปกติ'); // *แก้ ed[2] เป็น ed[0] หรือเช็ค index ให้ตรง
+    
+    const isGen = el('applyType').value.includes('ปกติ'); // หรือ 'ทั่วไป' เช็คคำให้ตรงกับ value
+    isGen ? hide('ts-box') : show('ts-box');
+    
+    if(!isEd && !isGen) el('tsFile').setAttribute('required','true'); 
+    else el('tsFile').removeAttribute('required');
+
+    showSection('form-section');
+
+    // --- จุดสำคัญที่แก้ไข ---
+    // ย้าย fillForm เข้ามาทำหลังจากโหลด Address เสร็จแล้วเท่านั้น
+    google.script.run.withSuccessHandler(d => { 
+        addrDB = d; 
+        popProv(); // สร้าง dropdown จังหวัด
+        initParentAddr(); // <--- เพิ่มบรรทัดนี้ครับ! (สร้าง dropdown ของผู้ปกครอง)
+        
+        if(isEd) {
+            fillForm(ed); // เรียกเติมข้อมูล หลังจาก dropdown มาแล้ว
+        } else {
+            loading(0);
+        }
+    }).getAddressData();
+}
+  function fillForm(d) {
+    const el = (id) => document.getElementById(id);
+
+    // ============================================
+    // 1. ข้อมูลส่วนตัวและระดับชั้น (Force Select)
+    // ============================================
+    el('editIdCard').value = d[13];
+    let safeLevel = String(d[5] || "").trim();
+    el('level').value = safeLevel; 
+
+    if(typeof loadPlans === 'function') {
+        loadPlans(d[6]); 
+        try { el('level').dispatchEvent(new Event('change')); } catch(e){}
+    }
+
+    let planRetry = 0;
+    const targetPlan = String(d[6] || "").trim();
+    const planInterval = setInterval(() => {
+        const planSelect = el('plan');
+        if (planSelect && planSelect.options.length > 0) {
+            planSelect.value = targetPlan;
+            if (planSelect.value === targetPlan) {
+                clearInterval(planInterval);
+            } else if (planRetry > 20) {
+                let opt = document.createElement('option');
+                opt.value = targetPlan;
+                opt.innerHTML = targetPlan + " (ข้อมูลเดิม)";
+                opt.selected = true;
+                planSelect.appendChild(opt);
+                clearInterval(planInterval);
+            }
+        }
+        planRetry++;
+        if (planRetry > 30) clearInterval(planInterval);
+    }, 100);
+
+    // --- 2. ข้อมูลส่วนตัวนักเรียน ---
+    el('prefix').value = d[7]; 
+    el('firstname').value = d[8]; 
+    el('lastname').value = d[9]; 
+    el('dob').value = d[10].replace(/'/g, '');
+    el('nationality').value = d[11]; 
+    el('religion').value = d[12];
+    
+    // ตรวจสอบว่ามีฟังก์ชัน setDig ไหม ถ้าไม่มีให้ข้ามไป
+    if(typeof setDig === 'function'){
+      setDig('idCard-container', d[13].replace(/'/g, ''));
+      setDig('phone-container', d[14].replace(/'/g, ''));
+    } else {
+      el('idCard').value = d[13].replace(/'/g, '');
+      el('phone').value = d[14].replace(/'/g, '');
+    }
+    
+    el('famStatus').value = d[16];
+
+    // --- 3. ข้อมูลครอบครัว (บิดา f, มารดา m, ผู้ปกครอง g) ---
+    // ปรับปรุงการใส่ที่อยู่: เนื่องจากข้อมูลเดิมรวมเป็นบรรทัดเดียว 
+    // เมื่อดึงมาแก้ไข จะนำข้อมูลทั้งหมดไปวางในช่อง "บ้านเลขที่" (addr_no) เพื่อป้องกัน Error
+    
+    const fillParent = (p, startIdx) => {
+    // 1. เติมข้อมูลพื้นฐาน
+    el(p+'_prefix').value = d[startIdx];
+    el(p+'_name').value   = d[startIdx+1];
+    el(p+'_lname').value  = d[startIdx+2];
+    el(p+'_job').value    = d[startIdx+3];
+    if(el(p+'_age')) el(p+'_age').value = d[startIdx+4] || '';
+    el(p+'_phone').value = String(d[startIdx+5]).replace(/'/g, '');
+
+    const fullAddr = String(d[startIdx+6] || "");
+    
+    // 2. ตรวจสอบสถานะ "ที่อยู่เดียวกับนักเรียน"
+    if(fullAddr.includes('เดียวกับ')) {
+        el(p+'_same').checked = true;
+        toggleAddr(p);
+    } else {
+        el(p+'_same').checked = false;
+        toggleAddr(p);
+        
+        try {
+            // --- ส่วนการแยกที่อยู่ (Logic เดียวกับนักเรียน) ---
+            
+            // ดึงจังหวัด: หาคำหลัง จ. หรือ จังหวัด
+            const provMatch = fullAddr.match(/จ\.?\s?([ก-๙]+)/) || fullAddr.match(/จังหวัด\s?([ก-๙]+)/);
+            if (provMatch && el(p+'_addr_prov')) {
+                const provName = provMatch[1].trim();
+                el(p+'_addr_prov').value = provName;
+                
+                // กระตุ้นให้โหลด อำเภอ
+                chProvP(p); 
+
+                setTimeout(() => {
+                    // ดึงอำเภอ: หาคำหลัง อ. หรือ อำเภอ
+                    const distMatch = fullAddr.match(/อ\.?\s?([ก-๙]+)/) || fullAddr.match(/อำเภอ\s?([ก-๙]+)/);
+                    if (distMatch && el(p+'_addr_dist')) {
+                        const distName = distMatch[1].trim();
+                        el(p+'_addr_dist').value = distName;
+                        
+                        // กระตุ้นให้โหลด ตำบล
+                        chDistP(p);
+
+                        setTimeout(() => {
+                            // ดึงตำบล: หาคำหลัง ต. หรือ ตำบล
+                            const subMatch = fullAddr.match(/ต\.?\s?([ก-๙]+)/) || fullAddr.match(/ตำบล\s?([ก-๙]+)/);
+                            if (subMatch && el(p+'_addr_sub')) {
+                                el(p+'_addr_sub').value = subMatch[1].trim();
+                                // กระตุ้นให้โหลด รหัสไปรษณีย์
+                                chSubP(p);
+                            }
+                            
+                            // ดึงเลขที่บ้าน (คำแรกสุดของประโยค)
+                            const addrNo = fullAddr.split(' ')[0];
+                            el(p+'_addr_no').value = addrNo;
+                            
+                            // ดึงหมู่ (หาคำว่า หมู่ หรือ ม.)
+                            const mooMatch = fullAddr.match(/หมู่\s?(\d+)/) || fullAddr.match(/ม\.(\d+)/);
+                            if(mooMatch) el(p+'_addr_moo').value = mooMatch[1];
+                            
+                            // ดึงถนน/ซอย (พยายามหาคำระหว่าง หมู่ กับ ตำบล)
+                            const roadMatch = fullAddr.match(/(?:ถนน|ซอย|ถ\.|ซ\.)\s?([ก-๙0-9\s]+)(?=ต\.|ตำบล)/);
+                            if(roadMatch) el(p+'_addr_road').value = roadMatch[1].trim();
+                            
+                        }, 400);
+                    }
+                }, 400);
+            } else {
+                // ถ้าแกะไม่ได้เลย ให้ใส่ช่องเลขที่บ้านไว้กันข้อมูลหาย
+                el(p+'_addr_no').value = fullAddr;
+            }
+        } catch (e) {
+            console.error("Error parsing parent address:", e);
+            el(p+'_addr_no').value = fullAddr;
+        }
+    }
+}
+
+    // เรียกฟังก์ชันเติมข้อมูลตามตำแหน่ง Column ในชีต
+    fillParent('f', 17); // บิดา เริ่ม col 17
+    fillParent('m', 24); // มารดา เริ่ม col 24 (ถ้าแทรกคอลัมน์อายุแล้ว ลำดับอาจเลื่อน ให้เช็คเลข index อีกที)
+    
+    // --- ส่วนของผู้ปกครอง (Guardian) ---
+    el('g_prefix').value = d[31];
+    el('g_name').value = d[32];
+    el('g_lname').value = d[33];
+    el('g_rel').value = d[34];
+    el('g_job').value = d[35];
+    if(el('g_age')) el('g_age').value = d[36] || ''; 
+    el('g_phone').value = String(d[37]).replace(/'/g, '');
+    
+    const gAddr = String(d[38] || "");
+    if(gAddr.includes('เดียวกับ')) {
+        el('g_same').checked = true;
+        toggleAddr('g');
+    } else {
+        el('g_same').checked = false;
+        toggleAddr('g');
+        
+        // --- ส่วนที่เพิ่มเข้ามาเพื่อแยกที่อยู่ลงช่อง ---
+        try {
+            // 1. ค้นหาจังหวัด
+            const provMatch = gAddr.match(/จ\.?\s?([ก-๙]+)/) || gAddr.match(/จังหวัด\s?([ก-๙]+)/);
+            if (provMatch && el('g_addr_prov')) {
+                const provName = provMatch[1].trim();
+                el('g_addr_prov').value = provName;
+                
+                // สั่งโหลด อำเภอ
+                chProvP('g'); 
+
+                setTimeout(() => {
+                    // 2. ค้นหาอำเภอ
+                    const distMatch = gAddr.match(/อ\.?\s?([ก-๙]+)/) || gAddr.match(/อำเภอ\s?([ก-๙]+)/);
+                    if (distMatch && el('g_addr_dist')) {
+                        el('g_addr_dist').value = distMatch[1].trim();
+                        
+                        // สั่งโหลด ตำบล
+                        chDistP('g');
+
+                        setTimeout(() => {
+                            // 3. ค้นหาตำบล
+                            const subMatch = gAddr.match(/ต\.?\s?([ก-๙]+)/) || gAddr.match(/ตำบล\s?([ก-๙]+)/);
+                            if (subMatch && el('g_addr_sub')) {
+                                el('g_addr_sub').value = subMatch[1].trim();
+                                // โหลดรหัสไปรษณีย์
+                                chSubP('g');
+                            }
+                            
+                            // เติมข้อมูล บ้านเลขที่ หมู่ ถนน (จากข้อมูลก้อนแรก)
+                            const addrParts = gAddr.split(' ');
+                            el('g_addr_no').value = addrParts[0] || ''; 
+                            
+                            const mooMatch = gAddr.match(/หมู่\s?(\d+)/) || gAddr.match(/ม\.(\d+)/);
+                            if(mooMatch) el('g_addr_moo').value = mooMatch[1];
+                            
+                            const roadMatch = gAddr.match(/(?:ถนน|ซอย|ถ\.|ซ\.)\s?([ก-๙0-9\s]+)(?=ต\.|ตำบล)/);
+                            if(roadMatch) el('g_addr_road').value = roadMatch[1].trim();
+                            
+                        }, 400);
+                    }
+                }, 400);
+            } else {
+                // ถ้าแกะไม่ได้เลย ให้ใส่ช่องแรกไว้กันข้อมูลหาย
+                if(el('g_addr_no')) el('g_addr_no').value = gAddr;
+            }
+        } catch (e) {
+            console.error("Error parsing guardian address:", e);
+            if(el('g_addr_no')) el('g_addr_no').value = gAddr;
+        }
+    }
+
+    // --- รูปและเอกสาร ---
+    if(d[d.length-4] && d[d.length-4]!='-') {
+        el('oldPhoto').innerHTML=`<div class="alert alert-info py-1"><small>มีรูปเดิม: <a href="${d[d.length-4]}" target="_blank">ดูรูป</a></small></div><img src="${getDirectImg(d[d.length-4])}" class="img-thumbnail mt-1" style="max-height:100px;">`;
+        show('oldPhoto'); el('photoFile').removeAttribute('required');
+    }
+    if(d[d.length-3] && d[d.length-3]!='-') { 
+        el('oldTs').innerHTML=`<div class="alert alert-info py-1"><small>เอกสารเดิม: <a href="${d[d.length-3]}" target="_blank">เปิดดู</a></small></div>`; 
+        show('oldTs'); 
+    }
+
+    // --- 4. ที่อยู่นักเรียน (JSON) ---
+    let jsonAddr = d[d.length - 1]; 
+    if (jsonAddr && typeof jsonAddr === 'string' && jsonAddr.startsWith('{')) {
+        try {
+            let addr = JSON.parse(jsonAddr);
+            el('addrNo').value = addr.no || '';
+            el('addrMoo').value = addr.moo || '';
+            el('addrSoi').value = addr.soi || '';
+            el('addrRoad').value = addr.road || '';
+
+            el('province').value = addr.prov;
+            el('province').dispatchEvent(new Event('change'));
+
+            setTimeout(() => {
+                el('district').value = addr.dist;
+                el('district').dispatchEvent(new Event('change'));
+
+                setTimeout(() => {
+                    el('subdistrict').value = addr.sub;
+                    if(addr.zip) el('zipcode').value = addr.zip;
+                    loading(0); // ปิดหน้าประมวลผล
+                }, 500);
+            }, 500);
+
+        } catch (e) { console.error("JSON Error", e); loading(0); }
+    } else {
+        loading(0);
+    }
+}
+   
+
+
+
+    function loadPlans(sv) {
+       const l = el('level').value; const t = el('applyType').value;
+       if(!l) return;
+       google.script.run.withSuccessHandler(p => {
+          const s = el('plan'); s.innerHTML='<option value="">เลือก</option>';
+          p.forEach(x => s.add(new Option(x,x)));
+          if(sv) s.value = sv;
+       }).getStudyPlans(l, t);
+    }
+    function popProv() { const p = [...new Set(addrDB.map(r=>r[0]))].sort(); const s = el('province'); s.innerHTML='<option value="">เลือก</option>'; p.forEach(x=>s.add(new Option(x,x))); }
+    function chProv() { const pv=el('province').value; const d=el('district'); const sd=el('subdistrict'); el('zipcode').value=''; d.innerHTML='<option value="">เลือก</option>'; d.disabled=!pv; sd.innerHTML='<option value="">เลือก</option>'; sd.disabled=true; if(pv) [...new Set(addrDB.filter(r=>r[0]===pv).map(r=>r[1]))].sort().forEach(x=>d.add(new Option(x,x))); }
+    function chDist() { const pv=el('province').value; const dt=el('district').value; const sd=el('subdistrict'); el('zipcode').value=''; sd.innerHTML='<option value="">เลือก</option>'; sd.disabled=!dt; if(dt) [...new Set(addrDB.filter(r=>r[0]===pv && r[1]===dt).map(r=>r[2]))].sort().forEach(x=>sd.add(new Option(x,x))); }
+    function chSub() { const f=addrDB.find(r=>r[0]===el('province').value && r[1]===el('district').value && r[2]===el('subdistrict').value); if(f) el('zipcode').value=f[3]; }
+   
+    function toggleAddr(p) {
+    const isSame = el(p+'_same').checked;
+    const div = el(p+'_addr_div');
+
+    // 1. ซ่อน/แสดง กล่องที่อยู่
+    // ถ้าติ๊กถูก (isSame) ให้ซ่อน (none), ถ้าไม่ติ๊ก ให้แสดง (block)
+    div.style.display = isSame ? 'none' : 'block';
+
+    // 2. จัดการเรื่อง "บังคับกรอก (Required)"
+    // ช่องที่ "จำเป็น" ต้องกรอก (ถ้าเลือกกรอกเอง)
+    const reqFields = ['no', 'sub', 'dist', 'prov']; 
+    // ช่องทั้งหมด (รวมช่องที่ไม่บังคับ เช่น หมู่, ถนน)
+    const allFields = ['no', 'moo', 'road', 'sub', 'dist', 'prov'];
+
+    allFields.forEach(k => {
+        // หา element ของแต่ละช่อง: เช่น f_addr_no, m_addr_prov
+        const input = el(p+'_addr_'+k);
+        
+        if(input) {
+            if (isSame) {
+                // กรณี: ใช้ที่อยู่เดียวกับนักเรียน (ซ่อนอยู่)
+                input.value = '';                  // ล้างค่าเก่าทิ้ง
+                input.removeAttribute('required'); // เอาคำสั่งบังคับกรอกออก (เพื่อไม่ให้ Error ตอนกดส่ง)
+            } else {
+                // กรณี: กรอกที่อยู่ใหม่ (แสดงอยู่)
+                // ถ้าเป็นช่องสำคัญ ให้เติม attribute required เข้าไป
+                if (reqFields.includes(k)) {
+                    input.setAttribute('required', 'true');
+                }
+            }
+        }
+    });
+}
+
+
+    function copyP(f) {
+    // 1. คัดลอกข้อมูลทั่วไป (รวม age)
+    ['prefix','name','lname','job','age','phone'].forEach(k => {
+        if(el(`g_${k}`) && el(`${f}_${k}`)) {
+            el(`g_${k}`).value = el(`${f}_${k}`).value;
+        }
+    });
+
+    // 2. ระบุความเกี่ยวข้อง
+    el('g_rel').value = f==='f' ? 'บิดา' : 'มารดา';
+    
+    // 3. คัดลอกสถานะ "ที่อยู่เดียวกับนักเรียน"
+    const srcSame = el(`${f}_same`).checked;
+    el('g_same').checked = srcSame;
+    
+    // สั่งเปิด/ปิดช่องกรอกที่อยู่ของ Guardian ตามสถานะที่ก๊อปมา
+    toggleAddr('g');
+    
+    // 4. ถ้าไม่ได้ใช้ที่อยู่เดียวกับนักเรียน (คือกรอกเอง) ให้คัดลอกไส้ในที่อยู่มาด้วย
+    if(!srcSame) {
+        // รายการช่องที่ต้องก๊อป (เพิ่ม zip เข้าไป)
+        ['no','moo','road','prov','dist','sub','zip'].forEach(k => {
+            const src = el(`${f}_addr_${k}`);
+            const dst = el(`g_addr_${k}`);
+            
+            if(src && dst) {
+                // ก๊อปปี้ค่า
+                dst.value = src.value;
+                
+                // *สำคัญ* ถ้าเป็น Dropdown (prov, dist, sub) ต้องก๊อป HTML (Option) มาด้วยไม่งั้นค่าไม่มา
+                if(['prov','dist','sub'].includes(k)) {
+                    dst.innerHTML = src.innerHTML; // ก๊อปตัวเลือกทั้งหมดมา
+                    dst.value = src.value;         // เลือกค่าเดิม
+                    dst.disabled = src.disabled;   // ก๊อปสถานะ disabled
+                }
+            }
+        });
+    }
+  }
+    function readF(input, id) {
+  // 1. เช็คว่ามีการเลือกไฟล์ไหม
+  if (input.files && input.files[0]) {
+    var file = input.files[0];
+    
+    // 2. เช็คขนาดไฟล์ไม่ให้เกิน 10 MB
+    if(file.size > 15 * 1024 * 1024) {
+        Swal.fire('แจ้งเตือน', 'ขนาดไฟล์ต้องไม่เกิน 15 MB', 'warning');
+        input.value = ''; 
+        return;
+    }
+
+    var reader = new FileReader();
+    
+    reader.onload = function(e) {
+      // --- ส่วนเดิม: จัดการ Base64 ---
+      var pureBase64 = e.target.result.split(',')[1]; 
+      var fileObj = {
+        mimeType: file.type,
+        data: pureBase64 
+      };
+      document.getElementById(id).value = JSON.stringify(fileObj);
+
+      // --- ส่วนที่เพิ่มใหม่: แสดงตัวอย่างรูป (Preview) ---
+      // เช็คว่าถ้าเป็นช่องรูปถ่าย (photo64) ให้โชว์รูป
+      if (id === 'photo64') {
+          const previewContainer = document.getElementById('newPhotoPreview');
+          const previewImg = document.getElementById('imgPreview');
+          const oldPhoto = document.getElementById('oldPhoto');
+
+          if (previewImg) {
+              previewImg.src = e.target.result; // ใส่รูปที่อ่านได้ลงไปใน tag img
+              if (previewContainer) previewContainer.style.display = 'block'; // สั่งให้แสดง div
+              if (oldPhoto) oldPhoto.style.display = 'none'; // ซ่อนรูปเดิม (ถ้ามี)
+          }
+      }
+    };
+
+    reader.readAsDataURL(file);
+  }
+}
+   
+  function handleSubmit(e) {
+    e.preventDefault();
+
+    // ดึงค่ามาพักไว้
+    const idCardVal = el('idCard').value.trim(); // ตัดช่องว่างออก
+    const phoneVal = el('phone').value.trim();
+    const selectedPlan = el('plan').value;
+    
+    // --- ส่วนที่ 1: ตรวจสอบเงื่อนไขพิเศษสำหรับ SMTE (ห้ามมี G) ---
+    const strictPlans = [
+       // "SMTE (วิทย์-คณิต-เทคโนโลยี-สิ่งแวดล้อม)",
+        "ห้องเรียนพิเศษวิทยาศาสตร์ คณิตศาสตร์ เทคโนโลยีและสิ่งแวดล้อม (SMTE)"
+    ];
+
+    // ถ้าเลือก SMTE และเลขบัตรไม่ใช่ตัวเลขล้วน (เช่น มี G) -> ห้ามสมัคร
+    if (strictPlans.includes(selectedPlan) && !/^\d+$/.test(idCardVal)) {
+        return Swal.fire(
+            'ข้อมูลไม่ถูกต้อง',
+            'แผนการเรียน SMTE ต้องใช้เลขบัตรประชาชน (ตัวเลข 13 หลัก) เท่านั้น',
+            'warning'
+        );
+    }
+
+    // --- ส่วนที่ 2: ตรวจสอบความถูกต้องของเลขบัตร ---
+    // กรณีที่ 1: เป็นตัวเลขล้วน 13 หลัก (คนไทย) -> ต้องผ่านสูตรคำนวณ
+    if (/^\d{13}$/.test(idCardVal)) {
+        if (!validateThaiID(idCardVal)) {
+            Swal.fire('ข้อผิดพลาด', 'เลขบัตรประชาชนไม่ถูกต้อง (Check Digit ไม่ผ่าน)', 'error');
+            loading(0);
+            return;
+        }
+    } 
+    // กรณีที่ 2: ขึ้นต้นด้วย G (ต่างด้าว) -> เช็คแค่ความยาว (หรือเงื่อนไขอื่นตามต้องการ)
+    else if (idCardVal.toUpperCase().startsWith('G')) {
+         // อาจจะเช็คความยาวของรหัส G ว่าต้องมีกี่หลัก (ถ้ามีกฏ)
+         if(idCardVal.length < 10) { 
+             return Swal.fire('ข้อผิดพลาด', 'รหัส G สั้นเกินไป', 'error');
+         }
+    } 
+    // กรณีที่ 3: ไม่เข้าพวกเลย
+    else {
+         return Swal.fire('ข้อผิดพลาด', 'รูปแบบเลขบัตรประชาชน หรือ รหัส G ไม่ถูกต้อง', 'error');
+    }
+
+    // --- ส่วนที่ 3: ตรวจสอบเบอร์โทร ---
+    if (phoneVal.length != 10) {
+        return Swal.fire('ข้อมูลไม่ครบ', 'กรุณาตรวจสอบเบอร์โทรศัพท์ (ต้องมี 10 หลัก)', 'warning');
+    }
+
+    // --- ส่วนที่ 4: ยืนยันและส่งข้อมูล (Logic เดิม) ---
+    Swal.fire({
+        title: 'ยืนยันข้อมูล',
+        text: 'กรุณาตรวจสอบความถูกต้องก่อนส่ง',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'ส่งใบสมัคร',
+        cancelButtonText: 'แก้ไข'
+    }).then(r => {
+        if (r.isConfirmed) {
+            startSimulatedProgress();
+
+            // ฟังก์ชันย่อยสำหรับดึงข้อมูลผู้ปกครอง
+            const getP = (p) => {
+                // ฟังก์ชันย่อย: รวมที่อยู่
+                const buildAddr = () => {
+                    if (el(p + '_same').checked) return 'ที่อยู่เดียวกับนักเรียน';
+
+                    const no = el(p + '_addr_no') ? el(p + '_addr_no').value.trim() : '';
+                    const moo = el(p + '_addr_moo') ? el(p + '_addr_moo').value.trim() : '';
+                    const road = el(p + '_addr_road') ? el(p + '_addr_road').value.trim() : '';
+                    const sub = el(p + '_addr_sub') ? el(p + '_addr_sub').value.trim() : '';
+                    const dist = el(p + '_addr_dist') ? el(p + '_addr_dist').value.trim() : '';
+                    const prov = el(p + '_addr_prov') ? el(p + '_addr_prov').value.trim() : '';
+                    const zip = el(p + '_addr_zip') ? el(p + '_addr_zip').value.trim() : '';
+
+                    let full = `${no}`;
+                    if (moo) full += ` หมู่ ${moo}`;
+                    if (road) full += ` ถนน ${road}`;
+                    if (sub) full += ` ต.${sub}`;
+                    if (dist) full += ` อ.${dist}`;
+                    if (prov) full += ` จ.${prov}`;
+                    if (zip) full += ` ${zip}`;
+
+                    return full.trim();
+                };
+
+                return {
+                    prefix: el(p + '_prefix').value,
+                    name: el(p + '_name').value,
+                    lname: el(p + '_lname').value,
+                    job: el(p + '_job').value,
+                    age: el(p + '_age').value,
+                    phone: el(p + '_phone').value,
+                    rel: el(p + '_rel') ? el(p + '_rel').value : '',
+                    addr: buildAddr()
+                };
+            };
+
+            // เตรียม Object ข้อมูลสำหรับส่ง
+            const fd = {
+                isEditMode: el('isEditMode').value === 'true',
+                editIdCard: el('editIdCard').value,
+                applyType: el('applyType').value,
+                level: el('level').value,
+                plan: el('plan').value,
+                prefix: el('prefix').value,
+                firstname: el('firstname').value,
+                lastname: el('lastname').value,
+                firstnameEn: el('firstnameEn').value,
+                lastnameEn: el('lastnameEn').value,
+                oldSchoolName: el('oldSchoolName').value,
+                oldSchoolProvince: el('oldSchoolProvince').value,
+                dob: el('dob').value,
+                nationality: getVal('nationality', 'nationality_other'),
+                religion: getVal('religion', 'religion_other'),
+                idCard: idCardVal, // ใช้ค่าที่ Trim แล้ว
+                phone: phoneVal,
+                addrNo: el('addrNo').value,
+                addrMoo: el('addrMoo').value,
+                addrSoi: el('addrSoi').value,
+                addrRoad: el('addrRoad').value,
+                province: el('province').value,
+                district: el('district').value,
+                subdistrict: el('subdistrict').value,
+                zipcode: el('zipcode').value,
+                famStatus: el('famStatus').value,
+                father: getP('f'),
+                mother: getP('m'),
+                guardian: getP('g'),
+                photoFile: JSON.parse(el('photo64').value || '{}'),
+                transcriptFile: el('ts64').value ? JSON.parse(el('ts64').value) : null,
+                conductFile: el('conduct64').value ? JSON.parse(el('conduct64').value) : null
+            };
+
+            // ส่งข้อมูลไปที่ Google Apps Script
+           google.script.run
+                .withSuccessHandler(res => {
+                    // 2. [แก้ไข] สั่งหยุดนับและโชว์ 100% (แทน loading(0))
+                    stopSimulatedProgress();
+                    
+                    if (res.success) {
+                        Swal.fire('สำเร็จ', res.message, 'success').then(() => softReset());
+                    } else {
+                        Swal.fire('เกิดข้อผิดพลาด', res.message, 'error');
+                    }
+                })
+                .withFailureHandler(err => {
+                    // 3. [แก้ไข] ถ้า Error ก็ต้องสั่งหยุดเหมือนกัน
+                    stopSimulatedProgress();
+                    Swal.fire('เกิดข้อผิดพลาด', err.message, 'error');
+                })
+                .submitApplication(fd);
+        }
+    });
+}
+    function getVal(selectId, inputId) {
+     const val = document.getElementById(selectId).value;
+     if(val === 'อื่นๆ') {
+        return document.getElementById(inputId).value; 
+     }
+     return val;
+    }
+
+    function doCheck() {
+       const id = el('checkIdCard').value;
+       if(id.length!==13) return Swal.fire('ผิดพลาด','กรุณาระบุเลขบัตร 13 หลัก','warning');
+       loading(1);
+       google.script.run.withSuccessHandler(r=>{
+          loading(0); const d = el('status-result');
+          if(r.found) {
+             const b = r.status==='อนุมัติ'?'bg-success':(r.status.includes('ตรวจสอบ')?'bg-warning':'bg-danger');
+             const btn = r.status==='ให้ปรับปรุงข้อมูล' ? `<button class="btn btn-warning w-100 mt-2 rounded-pill" onclick='openForm(null, ${JSON.stringify(r.fullData)})'><i class="bi bi-pencil me-1"></i> แก้ไขข้อมูล</button>` : '';
+             // สร้าง HTML แสดงเลขที่นั่งสอบ (ถ้ามีข้อมูล)
+      let seatHtml = "";
+      if (r.seatNo && String(r.seatNo).trim() !== "") {
+          seatHtml = `<div class="alert alert-info mt-2 fw-bold text-center" style="font-size: 1.2rem;">
+                  <i class="bi bi-ticket-perforated"></i> เลขที่นั่งสอบ: ${r.seatNo}
+                </div>`;
+      }
+
+        d.innerHTML = `<div class="card shadow-sm">
+                <div class="card-header ${b} text-white fw-bold">${r.status}</div>
+                <div class="card-body">
+                  <h5>${r.name}</h5>
+                  <p class="mb-1 text-muted">${r.applyType}</p>
+                  ${seatHtml} <p class="text-danger small">${r.reason}</p>
+                  ${btn}
+                </div>
+              </div>`;
+          } else d.innerHTML = '<div class="alert alert-secondary">ไม่พบข้อมูลการสมัครในระบบ</div>';
+       }).withFailureHandler(alertErr).checkStatus(id);
+    }
+
+
+    // --- Admin ---
+    function doLogin() {
+    loading(1); // แสดง Loading
+    
+    // เรียก Server Login
+    google.script.run.withSuccessHandler(r => {
+        loading(0); // ปิด Loading
+        
+        if (r.success) {
+            // 1. จำค่าตัวแปร
+            aRole = r.role; 
+            aName = r.name; 
+            if(document.getElementById('aName')) document.getElementById('aName').innerText = aName;
+
+            // 2. 🔥 เปลี่ยนหน้าทันที (ย้ายมาทำก่อนโหลดข้อมูล)
+            // ใช้คำสั่งตรงๆ เพื่อความชัวร์ (ไม่ต้องพึ่ง showSection)
+            try {
+                document.getElementById('admin-login-section').classList.add('hidden'); // ซ่อน Login
+                document.getElementById('admin-dashboard').classList.remove('hidden');  // แสดง Dashboard
+            } catch(e) { 
+                console.error("หา ID หน้าจอไม่เจอ: ", e);
+                alert("Login สำเร็จ แต่หาหน้า Dashboard ไม่เจอ");
+            }
+
+            // 3. ค่อยโหลดข้อมูลทีหลัง (ถ้า Error จะได้ไม่ค้างหน้า Login)
+            try {
+                loadAdm(); 
+                loadAdminStatus();
+            } catch(e) {
+                console.error("โหลดข้อมูลไม่สำเร็จ: ", e);
+            }
+
+        } else {
+            alertErr(r.message); // รหัสผิด
+        }
+    }).withFailureHandler(err => {
+        loading(0);
+        alertErr("เกิดข้อผิดพลาด: " + err);
+    }).adminLogin(el('aUser').value, el('aPass').value);
+}
+   
+    function loadAdm() {
+    // 1. แสดงสถานะกำลังโหลดในตาราง (จะได้รู้ว่าโค้ดเริ่มทำงาน)
+    const tbody = document.querySelector('#aTable tbody');
+    if(tbody) tbody.innerHTML = '<tr><td colspan="3" class="text-center py-5 text-muted">⏳ กำลังดึงข้อมูล...</td></tr>';
+
+    google.script.run.withSuccessHandler(r => {
+        console.log("Data form Server:", r); // ดูข้อมูลใน Console ได้
+
+        // 2. ป้องกันข้อมูลเป็นค่าว่าง
+        if (!r) {
+            console.error("Server ส่งข้อมูลมาเป็น null");
+            return;
+        }
+
+        // 3. กำหนดค่า allSt (เช็คว่าข้อมูลมาแบบไหน)
+        // ถ้ามาเป็น Object {students: [...]} หรือมาเป็น Array [...] ตรงๆ
+        if (r.students) {
+            allSt = r.students;
+            // --- [เพิ่มใหม่] สร้างตัวเลือกแผนการเรียนอัตโนมัติ ---
+        const planSet = new Set(allSt.map(s => s.plan).filter(Boolean)); // ดึงชื่อแผนทั้งหมดและตัดตัวซ้ำ
+        const planSelect = document.getElementById('planFilter');
+        
+        // เก็บค่าเดิมไว้ก่อน (กรณีรีเฟรชตาราง)
+        const oldVal = planSelect.value;
+        
+        planSelect.innerHTML = '<option value="all">📖 ทุกแผนการเรียน</option>';
+        [...planSet].sort().forEach(p => {
+             planSelect.add(new Option(p, p));
+        });
+        
+        // คืนค่าเดิมถ้ามี
+        if ([...planSet].includes(oldVal)) planSelect.value = oldVal;
+
+        } else if (Array.isArray(r)) {
+            allSt = r; // กรณี Server ส่งมาเป็น Array ตรงๆ
+        } else {
+            allSt = [];
+        }
+
+        // 4. 🔥 อัปเดตตัวเลขสถิติ (ใส่ if ดักไว้ กันพังถ้าไม่มีช่องนี้)
+        if (r.stats) {
+            if(document.getElementById('st-total')) document.getElementById('st-total').innerText = r.stats.total;
+            if(document.getElementById('st-pend')) document.getElementById('st-pend').innerText = r.stats.pending;
+            if(document.getElementById('st-app')) document.getElementById('st-app').innerText = r.stats.approved;
+        }
+
+        // 5. สร้างตาราง (สำคัญที่สุด)
+        try {
+            filterTbl(); 
+        } catch (e) {
+            console.error("สร้างตารางไม่ได้:", e);
+        }
+
+        // 🔥 เพิ่มโค้ดส่วนนี้ต่อท้าย เพื่อให้กราฟแสดงผลครับ
+        try { 
+             updateCharts(); 
+        } catch (e) { 
+             console.warn("วาดกราฟไม่ได้:", e); 
+        }
+
+        // 6. วาดกราฟ (ถ้ามีฟังก์ชันวาดกราฟ)
+        // ถ้าคุณมีฟังก์ชันคำนวณกราฟ ให้เรียกตรงนี้ครับ เช่น updateCharts(allSt);
+
+    }).withFailureHandler(err => {
+        alertErr(err);
+        if(tbody) tbody.innerHTML = `<tr><td colspan="3" class="text-center text-danger">Error: ${err}</td></tr>`;
+    }).getAdminData();
+}
+
+
+// ฟังก์ชันคำนวณและวาดกราฟ
+function updateCharts() {
+    if (!allSt || allSt.length === 0) return;
+
+    // 1. เตรียมตัวแปรนับข้อมูล
+    let planCounts = {};
+    let statusCounts = { 'อนุมัติ': 0, 'รอตรวจสอบ': 0, 'ไม่ผ่าน': 0 };
+
+    allSt.forEach(s => {
+        // นับแผนการเรียน
+        let p = s.plan || 'ไม่ระบุ';
+        planCounts[p] = (planCounts[p] || 0) + 1;
+
+        // นับสถานะ
+        let st = s.status || 'รอตรวจสอบ';
+        if (st === 'อนุมัติ') statusCounts['อนุมัติ']++;
+        else if (st.includes('ไม่ผ่าน') || st.includes('ปรับปรุง')) statusCounts['ไม่ผ่าน']++;
+        else statusCounts['รอตรวจสอบ']++;
+    });
+
+    // 2. [เพิ่มใหม่] เรียงลำดับแผนการเรียน (จากมากไปน้อย) เพื่อความสวยงาม
+    let sortedPlanArr = Object.entries(planCounts).sort((a, b) => b[1] - a[1]);
+    let sortedPlanObj = {};
+    sortedPlanArr.forEach(([key, val]) => sortedPlanObj[key] = val);
+
+    // 3. เรียกวาดกราฟ
+    if (typeof Chart !== 'undefined') {
+        // กราฟแผนการเรียน (ใช้ฟังก์ชันใหม่ที่สร้างเฉพาะแนวนอน)
+        drawChartHorizontal('chartPlan', 'จำนวนผู้สมัคร (คน)', sortedPlanObj);
+        
+        // กราฟสถานะ (ใช้ฟังก์ชันเดิมได้เลย)
+        drawChart('chartStatus', 'สถานะการสมัคร', statusCounts, 'doughnut');
+    }
+}
+// ฟังก์ชันสร้างกราฟแนวนอนแบบปรับความสูงได้
+// ฟังก์ชันสร้างกราฟแนวนอน แบบมี Scroll Bar (แก้ไขอาการค้าง)
+function drawChartHorizontal(canvasId, label, dataObj) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    // 1. ล้างค่ากราฟเดิม (สำคัญ)
+    if (myCharts[canvasId]) {
+        myCharts[canvasId].destroy();
+        delete myCharts[canvasId];
+    }
+
+    const labels = Object.keys(dataObj);
+    const data = Object.values(dataObj);
+    
+    // 2. คำนวณความสูงของกราฟด้านใน (ตามจำนวนแผนการเรียน)
+    // กำหนดให้แต่ละแท่งสูงประมาณ 35px + ระยะขอบ
+    // ถ้าข้อมูลน้อย ให้ใช้ความสูงขั้นต่ำ 300px เพื่อความสวยงาม
+    const rowHeight = 35; 
+    const minHeight = 300;
+    const contentHeight = Math.max(minHeight, labels.length * rowHeight);
+
+    // ปรับความสูงของตัว Canvas โดยตรง (ส่วน div ที่ครอบไว้จะทำหน้าที่ Scroll เอง)
+    canvas.style.height = contentHeight + 'px';
+    canvas.style.width = '100%'; // บังคับความกว้างให้เต็ม
+
+    // 3. สร้างกราฟ
+    const ctx = canvas.getContext('2d');
+    myCharts[canvasId] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: label,
+                data: data,
+                backgroundColor: 'rgba(54, 162, 235, 0.7)', // สีฟ้า
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1,
+                barThickness: 20, // ความหนาของแท่งกราฟคงที่
+            }]
+        },
+        options: {
+            indexAxis: 'y', // แนวนอน
+            maintainAspectRatio: false, // ปล่อยให้ยืดตามที่เรากำหนด
+            responsive: true,
+            animation: false, // ปิด Animation เพื่อความลื่นไหลและป้องกันการค้าง
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: { label: (c) => ` ${c.formattedValue} คน` }
+                }
+            },
+            scales: {
+                x: { 
+                    beginAtZero: true,
+                    ticks: { stepSize: 1 } // แกน X เป็นจำนวนเต็ม
+                },
+                y: {
+                    ticks: { 
+                        autoSkip: false, // ห้ามซ่อนชื่อแผนการเรียน
+                        font: { size: 14 }
+                    },
+                    grid: { display: false } // ซ่อนเส้นตารางแนวนอนเพื่อความสะอาดตา
+                }
+            }
+        }
+    });
+}
+// ฟังก์ชันกดปุ่ม "ดูข้อมูล"
+function viewS(rowIndex) {
+    const s = allSt.find(item => item.rowIndex == rowIndex);
+    if (!s) return;
+
+    // --- ส่วนแจ้งเตือนเพื่อตรวจสอบ (Debug) ---
+    // มันจะเด้งบอกเลยว่า ลิงก์รูปที่ระบบเห็น คืออะไร?
+    // ถ้ามันว่างเปล่า แสดงว่าเลขคอลัมน์ใน Code.gs ผิดแน่นอนครับ
+    // alert("ลิงก์รูปที่อ่านได้คือ:\n" + s.photo); 
+    // ------------------------------------
+
+    if(document.getElementById('vName')) document.getElementById('vName').innerText = s.name || '-';
+    if(document.getElementById('vIdCard')) document.getElementById('vIdCard').innerText = s.idCard || '-';
+    if(document.getElementById('vLevel')) document.getElementById('vLevel').innerText = s.level || '-';
+    if(document.getElementById('vPlan')) document.getElementById('vPlan').innerText = s.plan || '-';
+    
+    // สถานะ
+    const stBadge = document.getElementById('vStatus');
+    if(stBadge) {
+        stBadge.innerText = s.status || 'รอตรวจสอบ';
+        stBadge.className = 'badge fs-6 ' + (s.status === 'อนุมัติ' ? 'bg-success' : s.status.includes('ไม่ผ่าน') ? 'bg-danger' : 'bg-warning text-dark');
+    }
+
+    // รูปภาพ
+    const imgEl = document.getElementById('vPhoto');
+    let photoUrl = s.photo || '';
+    
+    // ลองดึง ID
+    let fileIdMatch = photoUrl.match(/[-\w]{25,}/);
+    
+    if (fileIdMatch) {
+        // เจอ ID รูป -> แสดงรูป
+        imgEl.src = "https://drive.google.com/thumbnail?id=" + fileIdMatch[0] + "&sz=w400";
+        imgEl.style.display = 'block';
+    } else {
+        // ไม่เจอรูป -> ใส่รูปว่าง
+        console.log("ไม่พบลิงก์รูป หรือลิงก์ผิด format:", photoUrl);
+        imgEl.src = 'https://via.placeholder.com/200?text=No+Photo';
+    }
+
+    // เอกสาร
+    const btnDoc = document.getElementById('vTranscript');
+    if(btnDoc) {
+        if (s.transcript && s.transcript.length > 5) {
+            btnDoc.href = s.transcript;
+            btnDoc.classList.remove('disabled', 'btn-secondary');
+            btnDoc.classList.add('btn-primary');
+            btnDoc.innerHTML = '<i class="bi bi-file-earmark-pdf"></i> เปิดดูใบ ปพ.1';
+        } else {
+            btnDoc.href = '#';
+            btnDoc.classList.add('disabled', 'btn-secondary');
+            btnDoc.classList.remove('btn-primary');
+            btnDoc.innerHTML = 'ไม่พบเอกสาร';
+        }
+    }
+
+    // --- ส่วนที่เพิ่มใหม่: ใบรับรองความประพฤติ ---
+    const btnConduct = document.getElementById('vConduct'); // อ้างอิง ID ปุ่มใหม่
+    if(btnConduct) {
+        // เช็คว่ามีลิงก์ไหม (และลิงก์ต้องยาวเกิน 5 ตัวอักษร)
+        if (s.conduct && s.conduct.length > 5) {
+            btnConduct.href = s.conduct;
+            btnConduct.target = "_blank"; // เปิดแท็บใหม่
+            btnConduct.classList.remove('disabled', 'btn-secondary');
+            btnConduct.classList.add('btn-info', 'text-white'); // ใช้ปุ่มสีฟ้า
+            btnConduct.innerHTML = '<i class="bi bi-file-person"></i> เปิดดูใบรับรองความประพฤติ';
+            btnConduct.style.display = 'inline-block'; // แสดงปุ่ม
+        } else {
+            btnConduct.href = '#';
+            btnConduct.classList.add('disabled', 'btn-secondary');
+            btnConduct.classList.remove('btn-info', 'text-white');
+            btnConduct.innerHTML = 'ไม่พบใบรับรองฯ';
+            // btnConduct.style.display = 'none'; // หรือจะซ่อนไปเลยก็ได้ถ้าไม่มีไฟล์
+        }
+    }
+
+    new bootstrap.Modal(document.getElementById('studentModal')).show();
+}
+// ฟังก์ชันวาดกราฟ (ใช้ซ้ำได้)
+let myCharts = {}; // ตัวแปรเก็บกราฟเก่าเพื่อทำลายก่อนวาดใหม่
+function drawChart(canvasId, label, dataObj, type) {
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return;
+
+    // ล้างกราฟเก่าทิ้งก่อน (ไม่งั้นกราฟจะซ้อนกัน)
+    if (myCharts[canvasId]) myCharts[canvasId].destroy();
+
+    myCharts[canvasId] = new Chart(ctx, {
+        type: type,
+        data: {
+            labels: Object.keys(dataObj),
+            datasets: [{
+                label: label,
+                data: Object.values(dataObj),
+                backgroundColor: [
+                    '#36a2eb', '#ff6384', '#ffcd56', '#4bc0c0', '#9966ff', '#ff9f40'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+}
+   
+    function filterStatus(st) { el('aSearch').value = st; filterTbl(); }
+
+    function logout() {
+    // 1. ซ่อน Dashboard
+    document.getElementById('admin-dashboard').classList.add('hidden');
+    
+    // 2. แสดงหน้า Login
+    document.getElementById('admin-login-section').classList.remove('hidden');
+    
+    // 3. ล้างค่ารหัสผ่าน (เพื่อความปลอดภัย)
+    if(document.getElementById('aPass')) document.getElementById('aPass').value = '';
+    
+    // 4. ล้างข้อมูลในตาราง (Optional)
+    allSt = [];
+}
+
+    // ฟังก์ชันค้นหาและสร้างตาราง (Search & Filter)
+// ฟังก์ชันค้นหา + กรองระดับชั้น + กรองจำนวน + Responsive Table
+// ฟังก์ชันค้นหา + กรองระดับชั้น (ฉบับแก้ไข: หาข้อมูลเจอแน่นอน)
+function filterTbl() {
+    const tbody = document.querySelector('#aTable tbody');
+    if (!tbody) return;
+    
+    // เคลียร์ข้อมูลเก่าก่อนเริ่มวาดใหม่
+    tbody.innerHTML = ''; 
+
+    // 1. รับค่าจากตัวกรอง
+    let txt = document.getElementById('searchBox').value.trim().toLowerCase();
+    let stFilter = document.getElementById('statusFilter').value;
+    let lvFilter = document.getElementById('levelFilter').value; 
+    let pln = document.getElementById('planFilter').value; // รับค่าแผนการเรียน
+    let maxRows = document.getElementById('rowsFilter').value;
+
+    // 2. กรองข้อมูล (Filter Data)
+    let filteredData = allSt.filter(s => {
+        // กรองข้อความ (ชื่อ หรือ เลขบัตร)
+        let matchText = (s.name.toLowerCase().includes(txt) || s.idCard.includes(txt));
+        
+        // กรองสถานะ
+        let matchStatus = true;
+        if (stFilter !== 'all') {
+            if (stFilter === 'ไม่ผ่าน') matchStatus = s.status.includes('ไม่ผ่าน') || s.status.includes('แก้ไข') || s.status.includes('ปรับปรุง');
+            else matchStatus = s.status.includes(stFilter);
+        }
+
+        // กรองระดับชั้น
+        let matchLevel = true;
+        if (lvFilter !== 'all') {
+            let levelData = (s.level || '').toString(); 
+            if (lvFilter === 'ม.1') {
+                matchLevel = levelData.includes('1');
+            } else if (lvFilter === 'ม.4') {
+                matchLevel = levelData.includes('4');
+            } else {
+                matchLevel = levelData.includes(lvFilter);
+            }
+        }
+
+        // กรองแผนการเรียน
+        const matchPlan = (pln === 'all') || (s.plan === pln);
+
+        // รวมทุกเงื่อนไข (ต้องจริงทั้งหมดถึงจะผ่าน)
+        return matchText && matchStatus && matchLevel && matchPlan;
+    });
+
+    // 3. ถ้าไม่พบข้อมูล
+    if (filteredData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-5">❌ ไม่พบข้อมูลที่กำหนด</td></tr>`;
+        
+        // อัปเดตตัวนับข้อมูล (แสดง 0)
+        let countDisplay = document.getElementById('countDisplay');
+        if(countDisplay) countDisplay.innerText = `แสดง 0 จาก 0 รายการ (ทั้งหมด ${allSt.length})`;
+        
+        return;
+    }
+
+    // 4. ตัดจำนวนแถวตามที่เลือก
+    let displayData = filteredData;
+    if (maxRows !== 'all') { // แก้ไขเงื่อนไข 'all' ให้ตรงกับ value ที่ตั้งไว้ (บางทีตั้งเป็น 1000 หรือ 'all')
+        // ถ้า value ใน HTML เป็น '1000' หรือตัวเลข ให้ใช้ parseInt
+        if(!isNaN(parseInt(maxRows))) {
+             displayData = filteredData.slice(0, parseInt(maxRows));
+        }
+    }
+
+    // 5. วาดตาราง (Loop สร้าง HTML)
+    displayData.forEach(s => {
+        let badgeClass = 'bg-secondary';
+        if (s.status === 'อนุมัติ') badgeClass = 'bg-success';
+        else if (s.status.includes('ไม่ผ่าน') || s.status.includes('แก้ไข')) badgeClass = 'bg-danger';
+        else badgeClass = 'bg-warning text-dark';
+
+        // ป้องกันค่า null/undefined ในชื่อผู้ปกครองและเบอร์โทร
+        let pName = (s.fullData && s.fullData[31] ? s.fullData[31] : '') + 
+                    (s.fullData && s.fullData[32] ? s.fullData[32] : '') + ' ' + 
+                    (s.fullData && s.fullData[33] ? s.fullData[33] : '');
+        let pTel = (s.fullData && s.fullData[36]) ? s.fullData[36] : '-';
+
+        let row = `
+            <tr class="align-top border-bottom">
+                <td class="p-2 p-md-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="fw-bold text-primary fs-5">${s.name}</div>
+                            <span class="badge bg-light text-dark border me-1">${s.level}</span>
+                            <span class="badge bg-light text-dark border">${s.plan}</span>
+                        </div>
+                    </div>
+                    <div class="mt-2 small text-muted bg-light p-2 rounded border">
+                        <div><i class="bi bi-card-heading"></i> เลขบัตร: ${s.idCard}</div>
+                        <div class="mt-1"><i class="bi bi-people-fill"></i> ผปค: ${pName} (<a href="tel:${pTel}">${pTel}</a>)</div>
+                    </div>
+                </td>
+                <td class="text-center pt-3" style="min-width: 100px;">
+                    <span class="badge rounded-pill ${badgeClass} fs-6 w-100">${s.status}</span>
+                    <div class="mt-2 small text-muted" style="font-size: 0.75rem;">${s.timestamp.split(' ')[0]}</div>
+                </td>
+                <td class="text-center pt-3">
+                     <button class="btn btn-outline-primary btn-sm" onclick="viewS(${s.rowIndex})">
+                        <i class="bi bi-eye-fill"></i><span class="d-none d-md-inline"> ดูข้อมูล</span>
+                     </button>
+                </td>
+            </tr>
+        `;
+        tbody.innerHTML += row;
+    });
+
+    // อัปเดตตัวนับข้อมูลท้ายตาราง (ถ้ามี element id="countDisplay")
+    let countDisplay = document.getElementById('countDisplay');
+    if(countDisplay) {
+        countDisplay.innerText = `แสดง ${displayData.length} จาก ${filteredData.length} รายการ (ทั้งหมด ${allSt.length})`;
+    }
+}
+    function viewS(i) {
+       curIdx=i; const s = allSt.find(x=>x.rowIndex===i);
+       let photoSrc = getDirectImg(s.photo);
+       
+       let btnConduct = (s.conduct && s.conduct.length > 5) 
+        ? `<a href="${s.conduct}" target="_blank" class="btn btn-sm btn-outline-info mt-1 w-100"><i class="bi bi-file-person"></i> ดูใบรับรองความประพฤติ</a>`
+        : `<button class="btn btn-sm btn-light mt-1 w-100 text-muted" disabled>ไม่มีใบรับรองความประพฤติ</button>`;
+
+       let h = `<div class="row">
+          <div class="col-md-4 text-center mb-3">
+             <div class="card shadow-sm p-2">
+                <img src="${photoSrc}" class="img-fluid rounded" style="max-height:200px; object-fit:cover;">
+                <div class="mt-2 fw-bold text-primary">${s.appId}</div>
+             </div>
+             <a href="${s.transcript}" target="_blank" class="btn btn-sm btn-outline-dark mt-2 w-100"><i class="bi bi-file-earmark-text"></i> ดูใบ ปพ.1</a>
+
+             ${btnConduct}
+
+          </div>
+          <div class="col-md-8">
+             <h5 class="fw-bold text-primary border-bottom pb-2">${s.name}</h5>
+             <table class="table table-sm table-borderless">
+               <tr><th width="30%">เลขบัตร:</th><td>${s.idCard}</td></tr>
+               <tr><th>ระดับชั้น:</th><td>${s.level}</td></tr>
+               <tr><th>แผนการเรียน:</th><td>${s.plan}</td></tr>
+               <tr><th>สถานะ:</th><td><span class="badge bg-secondary">${s.status}</span></td></tr>
+               <tr class="table-light"><th colspan="2" class="pt-2 text-muted">ข้อมูลติดต่อผู้ปกครอง</th></tr>
+               <tr><td colspan="2">${s.fullData[31]}${s.fullData[32]} ${s.fullData[33]} (${s.fullData[34]})<br>โทร: <a href="tel:${s.fullData[36]}">${s.fullData[36]}</a></td></tr>
+             </table>
+             ${s.reason ? `<div class="alert alert-danger py-1"><small><b>หมายเหตุ:</b> ${s.reason}</small></div>` : ''}
+          </div>
+       </div>`;
+       el('mBody').innerHTML = h;
+       if (!myModal) { myModal = new bootstrap.Modal(el('sModal'), { focus: false }); }
+       myModal.show();
+    }
+   
+    function upSt(s) {
+    Swal.fire({
+        title: 'ระบุเหตุผล/หมายเหตุ',
+        input: 'text',
+        inputPlaceholder: '(ถ้ามี)',
+        showCancelButton: true,
+        confirmButtonText: 'บันทึก'
+    }).then(r => {
+        if (r.isConfirmed) {
+            // 1. แสดง Loading ระหว่างรอระบบคำนวณเลข
+            Swal.fire({
+                title: 'กำลังประมวลผล...',
+                text: 'กรุณารอสักครู่ ระบบกำลังบันทึกและตรวจสอบเลขที่นั่งสอบ',
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            // 2. เรียกฟังก์ชันหลังบ้าน
+            google.script.run
+                .withSuccessHandler((res) => {
+                    // ทำงานเมื่อสำเร็จ
+                    if (myModal) myModal.hide();
+                    loadAdm(); // รีโหลดตาราง
+
+                    // ตรวจสอบข้อความที่ส่งกลับมา
+                    // ถ้ามีข้อความแจ้งเตือน (เช่น ⚠️) ให้แสดงเป็น Warning, ถ้าปกติเป็น Success
+                    let iconType = (res && res.message && res.message.includes('⚠️')) ? 'warning' : 'success';
+                    let msgText = (res && res.message) ? res.message : 'อัปเดตสถานะเรียบร้อยแล้ว';
+
+                    Swal.fire({
+                        title: 'บันทึกสำเร็จ',
+                        text: msgText, // ข้อความนี้จะบอกเลขที่นั่งสอบ
+                        icon: iconType
+                    });
+                })
+                .withFailureHandler((error) => {
+                    // 3. ทำงานเมื่อเกิด Error (จุดสำคัญที่แก้ปัญหาอาการเงียบ)
+                    console.error("Error:", error);
+                    Swal.fire({
+                        title: 'เกิดข้อผิดพลาด!',
+                        html: 'ระบบแจ้งว่า: <span style="color:red">' + error.message + '</span>',
+                        icon: 'error'
+                    });
+                })
+                .updateStudentStatus(curIdx, s, r.value, aName);
+        }
+    });
+}
+
+
+    // --- Stats Logic ---
+    function openStats() {
+       if (!statModal) { statModal = new bootstrap.Modal(el('statModal')); }
+       statModal.show();
+       
+       // Prepare Data
+       let plans = {};
+       let status = {'รอตรวจสอบ':0, 'อนุมัติ':0, 'ให้ปรับปรุงข้อมูล':0, 'ไม่ผ่านการคัดเลือก':0};
+       
+       allSt.forEach(s => {
+          // Count Plans
+          let k = s.level + " " + s.plan;
+          if(!plans[k]) plans[k] = 0;
+          plans[k]++;
+         
+          // Count Status
+          let st = s.status.split(' (')[0]; // Remove (Editor Name)
+          if(status[st] !== undefined) status[st]++;
+          else status['รอตรวจสอบ']++;
+       });
+
+
+       // Draw Charts
+       drawPlanChart(plans);
+       drawStatusChart(status);
+    }
+
+
+    function drawPlanChart(data) {
+       const ctx = el('chartPlan').getContext('2d');
+       if(cPlan) cPlan.destroy();
+       cPlan = new Chart(ctx, {
+          type: 'bar',
+          data: {
+             labels: Object.keys(data),
+             datasets: [{
+                label: 'จำนวนผู้สมัคร',
+                data: Object.values(data),
+                backgroundColor: 'rgba(13, 110, 253, 0.7)',
+                borderColor: 'rgba(13, 110, 253, 1)',
+                borderWidth: 1
+             }]
+          },
+          options: { responsive: true, scales: { y: { beginAtZero: true } } }
+       });
+    }
+
+
+    function drawStatusChart(data) {
+       const ctx = el('chartStatus').getContext('2d');
+       if(cStatus) cStatus.destroy();
+       cStatus = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+             labels: Object.keys(data),
+             datasets: [{
+                data: Object.values(data),
+                backgroundColor: ['#ffc107', '#198754', '#0dcaf0', '#dc3545']
+             }]
+          },
+          options: { responsive: true }
+       });
+    }
+
+    // --- ฟังก์ชันจัดการที่อยู่ผู้ปกครอง (Parent Address System) ---
+
+// 1. ฟังก์ชันโหลดรายชื่อจังหวัดใส่ Dropdown (เรียกเมื่อเปิดเว็บ)
+function initParentAddr() {
+    if(!addrDB || addrDB.length === 0) {
+        console.error("ฐานข้อมูลที่อยู่ (addrDB) ยังไม่โหลด");
+        return;
+    }
+
+    // ดึงรายชื่อจังหวัดทั้งหมด (Unique)
+    const provs = [...new Set(addrDB.map(x => x[0]))].sort();
+    
+    // วนลูปสร้างตัวเลือกให้ทั้ง บิดา(f), มารดา(m), และผู้ปกครอง(g)
+    ['f', 'm', 'g'].forEach(p => {
+        const sel = document.getElementById(p + '_addr_prov');
+        if(sel) {
+            sel.innerHTML = '<option value="">เลือกจังหวัด</option>'; // ล้างค่าเก่า
+            provs.forEach(pv => {
+                const opt = new Option(pv, pv);
+                sel.add(opt);
+            });
+            console.log("โหลดจังหวัดให้: " + p + " สำเร็จ");
+        } else {
+            console.warn("ไม่พบ Element ID: " + p + "_addr_prov");
+        }
+    });
+}
+
+// 2. เมื่อเลือกจังหวัด -> โหลดอำเภอ
+function chProvP(p) {
+    const prov = document.getElementById(p + '_addr_prov').value;
+    const distSel = document.getElementById(p + '_addr_dist');
+    const subSel = document.getElementById(p + '_addr_sub');
+    const zipInp = document.getElementById(p + '_addr_zip');
+
+    // เคลียร์ค่าเดิม
+    distSel.innerHTML = '<option value="">เลือกอำเภอ/เขต</option>';
+    subSel.innerHTML = '<option value="">เลือกตำบล/แขวง</option>';
+    zipInp.value = '';
+    distSel.disabled = true;
+    subSel.disabled = true;
+
+    if (prov) {
+        // กรองอำเภอที่อยู่ในจังหวัดนั้น
+        const dists = [...new Set(addrDB.filter(x => x[0] === prov).map(x => x[1]))].sort();
+        dists.forEach(d => distSel.add(new Option(d, d)));
+        distSel.disabled = false;
+    }
+}
+
+// 3. เมื่อเลือกอำเภอ -> โหลดตำบล
+function chDistP(p) {
+    const prov = document.getElementById(p + '_addr_prov').value;
+    const dist = document.getElementById(p + '_addr_dist').value;
+    const subSel = document.getElementById(p + '_addr_sub');
+    const zipInp = document.getElementById(p + '_addr_zip');
+
+    subSel.innerHTML = '<option value="">เลือกตำบล/แขวง</option>';
+    zipInp.value = '';
+    subSel.disabled = true;
+
+    if (dist) {
+        // กรองตำบลที่อยู่ในจังหวัดและอำเภอนั้น
+        const subs = [...new Set(addrDB.filter(x => x[0] === prov && x[1] === dist).map(x => x[2]))].sort();
+        subs.forEach(s => subSel.add(new Option(s, s)));
+        subSel.disabled = false;
+    }
+}
+
+// 4. เมื่อเลือกตำบล -> ใส่รหัสไปรษณีย์
+function chSubP(p) {
+    const prov = document.getElementById(p + '_addr_prov').value;
+    const dist = document.getElementById(p + '_addr_dist').value;
+    const sub = document.getElementById(p + '_addr_sub').value;
+    const zipInp = document.getElementById(p + '_addr_zip');
+
+    if (sub) {
+        // หา row ที่ตรงกันทั้ง 3 อย่าง
+        const found = addrDB.find(x => x[0] === prov && x[1] === dist && x[2] === sub);
+        if (found) {
+            zipInp.value = found[3]; // ใส่รหัสไปรษณีย์ (index 3)
+        }
+    }
+}
+
+    function exportToExcel() {
+    // เช็คว่ามีข้อมูลในตัวแปร allSt หรือไม่
+    if (typeof allSt === 'undefined' || allSt.length === 0) {
+        Swal.fire('แจ้งเตือน', 'ไม่พบข้อมูลสำหรับส่งออก', 'warning');
+        return;
+    }
+
+    let html = `<meta charset="utf-8"><table border="1">
+        <tr style="background-color: #198754; color: white;">
+            <th>ลำดับ</th>
+            <th>เลขบัตรประชาชน</th>
+            <th>ชื่อ-นามสกุล</th>
+            <th>ระดับชั้น</th>
+            <th>แผนการเรียน</th>
+            <th>เบอร์โทรศัพท์</th>
+            <th>สถานะ</th>
+        </tr>`;
+
+    allSt.forEach((s, idx) => {
+        html += `<tr>
+            <td align="center">${idx + 1}</td>
+            <td style="mso-number-format:'\\@';">'${s.idCard}</td>
+            <td>${s.name}</td>
+            <td align="center">${s.level}</td>
+            <td>${s.plan}</td>
+            <td style="mso-number-format:'\\@';">'${s.phone}</td>
+            <td>${s.status}</td>
+        </tr>`;
+    });
+    html += `</table>`;
+
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'รายชื่อผู้สมัคร_' + new Date().toLocaleDateString() + '.xls';
+    a.click();
+}
+
+// สั่งปิดหน้า Loading เมื่อเว็บโหลดเสร็จสมบูรณ์
+window.addEventListener('load', function() {
+  const loader = document.getElementById('initial-loader');
+  
+  // หน่วงเวลาเล็กน้อย (0.8 วิ) เพื่อความสมูท ไม่ให้แวบหายเร็วเกินไป
+  setTimeout(() => {
+    if (loader) {
+      loader.style.opacity = '0'; // สั่งให้จางลง
+      
+      // รอให้จางจนสุด (0.5 วิ) แล้วค่อยลบทิ้ง
+      setTimeout(() => {
+        loader.style.display = 'none';
+      }, 500); 
+    }
+  }, 800);
+});
+
+
+   function checkSystemStatus() {
+  google.script.run.withSuccessHandler(function(status) {
+    // ถ้าห้องพิเศษปิด -> ปิดปุ่มที่มีคำสั่ง openForm('special')
+    if (!status.special) {
+      disableBtn('special', 'ห้องเรียนพิเศษ ปิดรับสมัคร');
+    }
+    // ถ้าห้องทั่วไปปิด -> ปิดปุ่มที่มีคำสั่ง openForm('general')
+    if (!status.general) {
+      disableBtn('general', 'ห้องเรียนทั่วไป ปิดรับสมัคร');
+    }
+  }).getRecruitStatus();
+  }
+
+  function disableBtn(type, msg) {
+  // ค้นหาปุ่มที่มี onclick="openForm('type')"
+  var btn = document.querySelector(`button[onclick="openForm('${type}')"]`);
+  if (btn) {
+    btn.disabled = true;
+    btn.className = "btn btn-secondary w-100 btn-lg-custom shadow-sm"; // เปลี่ยนเป็นสีเทา
+    btn.innerHTML = `<i class="bi bi-lock-fill me-2"></i> ${msg}`;
   }
 }
 
-// --- ส่วนจัดการเปิด-ปิดระบบรับสมัคร ---
 
-// ฟังก์ชันสำหรับแอดมินกดเปิด/ปิด
-function setRecruitStatus(type, isOpen) {
-  var props = PropertiesService.getScriptProperties();
-  // ตั้งชื่อตัวแปรแยกกัน: STATUS_SPECIAL และ STATUS_GENERAL
-  var key = (type === 'special') ? 'STATUS_SPECIAL' : 'STATUS_GENERAL';
-  props.setProperty(key, isOpen ? 'true' : 'false');
-  return { success: true };
-}
+  // --- ฟังก์ชันสำหรับปุ่มสวิตช์ Admin ---
 
-// ฟังก์ชันดึงสถานะปัจจุบัน
-function getRecruitStatus() {
-  var props = PropertiesService.getScriptProperties();
-  return {
-    // ถ้าไม่เคยตั้งค่า (null) ให้ถือว่าเปิด (true) เป็นค่าเริ่มต้น
-    special: props.getProperty('STATUS_SPECIAL') !== 'false', 
-    general: props.getProperty('STATUS_GENERAL') !== 'false'
-  };
-}
-
-// --- เพิ่มฟังก์ชันเช็คเลขบัตรซ้ำ (สำหรับเรียกตรวจสอบทันที) ---
-function checkDuplicateID(idCard) {
-  const sheet = getSheet(CONFIG.SHEET_NAME_DATA);
-  const data = sheet.getDataRange().getValues();
+// 1. ฟังก์ชันเมื่อกดสวิตช์
+function toggleSystem(type, el) {
+  var isOpen = el.checked;
+  var name = (type === 'special') ? 'ห้องเรียนพิเศษ' : 'ห้องเรียนทั่วไป';
   
-  // วนลูปเช็ค (สมมติว่าเลขบัตรอยู่คอลัมน์ N หรือ Index 13)
-  // ตัดแถวหัวตารางออก และเช็คเฉพาะคนที่สถานะไม่ใช่ 'ยกเลิก' หรืออื่นๆ ตามต้องการ
-  const isDuplicate = data.slice(1).some(row => String(row[13]).replace(/'/g, '').trim() === String(idCard));
-  
-  return isDuplicate; // ส่งค่า true (ซ้ำ) หรือ false (ไม่ซ้ำ) กลับไป
+  el.disabled = true; // ล็อกกันกดรัว
+
+  google.script.run.withSuccessHandler(function() {
+    el.disabled = false;
+    // แจ้งเตือนมุมขวาล่าง
+    const Toast = Swal.mixin({
+      toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, timerProgressBar: true
+    });
+    Toast.fire({
+      icon: 'success',
+      title: (isOpen ? 'เปิด' : 'ปิด') + 'ระบบ ' + name + ' แล้ว'
+    });
+  }).withFailureHandler(function(err){
+    el.disabled = false;
+    el.checked = !isOpen; // ดีดสวิตช์กลับถ้า error
+    Swal.fire('Error', err.message, 'error');
+  }).setRecruitStatus(type, isOpen);
 }
+
+// 2. ฟังก์ชันโหลดสถานะปุ่มตอนเข้าหน้า Admin
+function loadAdminStatus() {
+  google.script.run.withSuccessHandler(function(status) {
+    var tSpec = document.getElementById('toggleSpecial');
+    var tGen = document.getElementById('toggleGeneral');
+    
+    if(tSpec) tSpec.checked = status.special;
+    if(tGen) tGen.checked = status.general;
+  }).getRecruitStatus();
+}
+document.addEventListener('DOMContentLoaded', function() {
+    checkSystemStatus();
+    initThaiOnlyInput();
+  });
+
+  // --- ฟังก์ชันบังคับกรอกเฉพาะภาษาไทย ---
+function initThaiOnlyInput() {
+  // 1. เลือกช่อง input ทุกอันที่มีคลาส 'text-only'
+  const inputs = document.querySelectorAll('.text-only');
+
+  inputs.forEach(input => {
+    input.addEventListener('input', function() {
+      const original = this.value;
+      
+      // 2. ใช้ Regex ยอมรับเฉพาะ ภาษาไทย (\u0E00-\u0E7F) และ ช่องว่าง (\s)
+      // ตัวอักษรอื่นๆ (อังกฤษ, ตัวเลข, สัญลักษณ์) จะถูกลบทิ้ง
+      const clean = original.replace(/[^\u0E00-\u0E7F\s]/g, '');
+
+      if (original !== clean) {
+        this.value = clean;
+        
+        // (ตัวเลือกเสริม) แจ้งเตือนเล็กๆ เมื่อพิมพ์ผิด
+        // Swal.mixin({
+        //   toast: true, position: 'top-end', showConfirmButton: false, timer: 1500
+        // }).fire({ icon: 'warning', title: 'กรุณากรอกภาษาไทยเท่านั้น' });
+      }
+    });
+  });
+}
+
+/* --- ฟังก์ชันสำหรับเปิดช่องกรอก 'อื่นๆ' --- */
+  function toggleOther(selectId, inputId) {
+     const selectObj = document.getElementById(selectId);
+     const inputObj = document.getElementById(inputId);
+     
+     if(selectObj.value === 'อื่นๆ') {
+        inputObj.classList.remove('hidden'); // แสดงช่องกรอก
+        inputObj.required = true;           // บังคับกรอก
+        inputObj.focus();                   // เอาเคอร์เซอร์ไปวางรอ
+     } else {
+        inputObj.classList.add('hidden');    // ซ่อนช่องกรอก
+        inputObj.required = false;          // เลิกบังคับ
+        inputObj.value = '';                // ล้างค่าเดิม
+     }
+  }
+
+  /* --- ฟังก์ชันช่วยดึงค่าข้อมูล (ใช้ตอนกดบันทึก) --- */
+  function getVal(selectId, inputId) {
+     const val = document.getElementById(selectId).value;
+     if(val === 'อื่นๆ') {
+        // ถ้าเลือกอื่นๆ ให้เอาค่าจากช่องที่พิมพ์มาแทน
+        return document.getElementById(inputId).value; 
+     }
+     return val;
+  }
+
+  // ตัวแปรสำหรับเก็บ Timer
+let progressInterval;
+
+// ฟังก์ชันเริ่มโหลด: รีเซ็ตค่าและสั่งให้หลอดวิ่ง
+function startSimulatedProgress() {
+    // 1. เปิดหน้า Loading
+    document.getElementById('loading').classList.remove('hidden');
+    
+    const bar = document.getElementById('progressBar');
+    let width = 0;
+    bar.style.width = '0%';
+    bar.innerText = '0%';
+    
+    // 2. เริ่มนับเปอร์เซ็นต์หลอกๆ
+    progressInterval = setInterval(() => {
+        // เพิ่มทีละนิดแบบสุ่ม (1-4%)
+        width += Math.random() * 4; 
+        
+        // ให้หยุดรอที่ 90% (รอจนกว่าเซิร์ฟเวอร์จะตอบกลับ)
+        if (width > 90) width = 90; 
+        
+        bar.style.width = Math.round(width) + '%';
+        bar.innerText = Math.round(width) + '%';
+    }, 500); // ขยับทุกๆ 0.5 วินาที
+}
+
+// ฟังก์ชันหยุดโหลด: ดีดไป 100% แล้วปิดหน้า Loading
+function stopSimulatedProgress() {
+    clearInterval(progressInterval); // หยุดนับ
+    const bar = document.getElementById('progressBar');
+    
+    // ดีดไป 100%
+    bar.style.width = '100%';
+    bar.innerText = '100%';
+    
+    // รอแป๊บนึง (0.5วิ) ให้คนเห็นว่าเต็ม 100 แล้วค่อยปิด
+    setTimeout(() => {
+        document.getElementById('loading').classList.add('hidden');
+    }, 500);
+}
+
+
+
+    
+  </script>
+  <div class="modal fade" id="studentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold"><i class="bi bi-person-vcard-fill"></i> ข้อมูลผู้สมัคร</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-5 text-center mb-3">
+                        <div class="border rounded p-2 bg-light d-flex align-items-center justify-content-center" style="min-height: 220px;">
+                            <img id="vPhoto" src="" class="img-fluid rounded shadow-sm" style="max-height: 250px;" alt="รูปถ่าย">
+                        </div>
+                        <div class="d-grid gap-2 mt-2">
+                             <a id="vTranscript" href="#" target="_blank" class="btn btn-primary">
+                                <i class="bi bi-file-earmark-pdf"></i> เปิดดูใบ ปพ.1
+                             </a>
+                             <a id="vConduct" href="#" target="_blank" class="btn btn-info text-white">
+                                <i class="bi bi-file-person"></i> เปิดดูใบรับรองความประพฤติ
+                             </a>
+                        </div>
+                    </div>
+                    <div class="col-md-7">
+                        <h4 id="vName" class="text-primary fw-bold mb-3"></h4>
+                        <p><strong>เลขบัตรประชาชน:</strong> <span id="vIdCard">-</span></p>
+                        <p><strong>ระดับชั้น:</strong> <span id="vLevel">-</span></p>
+                        <p><strong>แผนการเรียน:</strong> <span id="vPlan" class="text-success fw-bold">-</span></p>
+                        <hr>
+                        <div class="mb-3">
+                            <label class="fw-bold">สถานะปัจจุบัน:</label>
+                            <span id="vStatus" class="badge bg-secondary fs-6">รอตรวจสอบ</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
