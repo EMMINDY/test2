@@ -352,6 +352,28 @@
            <div class="col-md-2"><label class="form-label">คำนำหน้า</label><select id="prefix" class="form-select"><option>เด็กชาย</option><option>เด็กหญิง</option><option>นาย</option><option>นางสาว</option></select></div>
            <div class="col-md-5"><label class="form-label">ชื่อจริง <span class="req-star">*</span></label><input type="text" id="firstname" class="form-control text-only" required placeholder="ไม่ต้องใส่คำนำหน้า"></div>
            <div class="col-md-5"><label class="form-label">นามสกุล <span class="req-star">*</span></label><input type="text" id="lastname" class="form-control text-only" required></div>
+
+           <div class="col-md-6">
+  <label class="form-label">ชื่อจริง (ภาษาอังกฤษ)</label>
+  <input type="text" id="firstnameEn" class="form-control text-only" placeholder="English First Name">
+</div>
+<div class="col-md-6">
+  <label class="form-label">นามสกุล (ภาษาอังกฤษ)</label>
+  <input type="text" id="lastnameEn" class="form-control text-only" placeholder="English Last Name">
+</div>
+
+<div class="col-12"><hr class="my-3 text-secondary"></div>
+<h5 class="section-title"><i class="bi bi-building"></i> 1.1 ข้อมูลโรงเรียนเดิม</h5>
+<div class="row g-3">
+   <div class="col-md-8">
+     <label class="form-label">จบจากโรงเรียน (โรงเรียนเดิม)</label>
+     <input type="text" id="oldSchoolName" class="form-control" placeholder="ระบุชื่อโรงเรียนที่กำลังศึกษาหรือจบการศึกษา">
+   </div>
+   <div class="col-md-4">
+     <label class="form-label">จังหวัด</label>
+     <input type="text" id="oldSchoolProvince" class="form-control" placeholder="ระบุจังหวัด">
+   </div>
+</div>
            
            <div class="col-md-4"><label class="form-label">วันเกิด <span class="req-star">*</span></label><input type="date" id="dob" class="form-control" required></div>
            <div class="col-md-4">
@@ -1587,6 +1609,10 @@ function validateThaiID(id) {
                 prefix: el('prefix').value,
                 firstname: el('firstname').value,
                 lastname: el('lastname').value,
+                firstnameEn: el('firstnameEn').value,
+                lastnameEn: el('lastnameEn').value,
+                oldSchoolName: el('oldSchoolName').value,
+                oldSchoolProvince: el('oldSchoolProvince').value,
                 dob: el('dob').value,
                 nationality: getVal('nationality', 'nationality_other'),
                 religion: getVal('religion', 'religion_other'),
@@ -1648,14 +1674,14 @@ function validateThaiID(id) {
              const b = r.status==='อนุมัติ'?'bg-success':(r.status.includes('ตรวจสอบ')?'bg-warning':'bg-danger');
              const btn = r.status==='ให้ปรับปรุงข้อมูล' ? `<button class="btn btn-warning w-100 mt-2 rounded-pill" onclick='openForm(null, ${JSON.stringify(r.fullData)})'><i class="bi bi-pencil me-1"></i> แก้ไขข้อมูล</button>` : '';
              // สร้าง HTML แสดงเลขที่นั่งสอบ (ถ้ามีข้อมูล)
-let seatHtml = "";
-if (r.seatNo && String(r.seatNo).trim() !== "") {
-    seatHtml = `<div class="alert alert-info mt-2 fw-bold text-center" style="font-size: 1.2rem;">
+      let seatHtml = "";
+      if (r.seatNo && String(r.seatNo).trim() !== "") {
+          seatHtml = `<div class="alert alert-info mt-2 fw-bold text-center" style="font-size: 1.2rem;">
                   <i class="bi bi-ticket-perforated"></i> เลขที่นั่งสอบ: ${r.seatNo}
                 </div>`;
-}
+      }
 
-d.innerHTML = `<div class="card shadow-sm">
+        d.innerHTML = `<div class="card shadow-sm">
                 <div class="card-header ${b} text-white fw-bold">${r.status}</div>
                 <div class="card-body">
                   <h5>${r.name}</h5>
