@@ -353,25 +353,24 @@
            <div class="col-md-5"><label class="form-label">ชื่อจริง <span class="req-star">*</span></label><input type="text" id="firstname" class="form-control text-only" required placeholder="ไม่ต้องใส่คำนำหน้า"></div>
            <div class="col-md-5"><label class="form-label">นามสกุล <span class="req-star">*</span></label><input type="text" id="lastname" class="form-control text-only" required></div>
 
-           <div class="col-md-6">
+  <div class="col-md-6">
   <label class="form-label">ชื่อจริง (ภาษาอังกฤษ)</label>
-  <input type="text" id="firstnameEn" class="form-control text-only" placeholder="English First Name">
+  <input type="text" id="firstnameEn" class="form-control text-eng" placeholder="English First Name">
 </div>
 <div class="col-md-6">
   <label class="form-label">นามสกุล (ภาษาอังกฤษ)</label>
-  <input type="text" id="lastnameEn" class="form-control text-only" placeholder="English Last Name">
+  <input type="text" id="lastnameEn" class="form-control text-eng" placeholder="English Last Name">
 </div>
 
-<div class="col-12"><hr class="my-3 text-secondary"></div>
-<h5 class="section-title"><i class="bi bi-building"></i> 1.1 ข้อมูลโรงเรียนเดิม</h5>
 <div class="row g-3">
    <div class="col-md-8">
-     <label class="form-label">จบจากโรงเรียน (โรงเรียนเดิม)</label>
-     <input type="text" id="oldSchoolName" class="form-control" placeholder="ระบุชื่อโรงเรียนที่กำลังศึกษาหรือจบการศึกษา">
+     <label class="form-label">จบจากโรงเรียน (โรงเรียนเดิม) </label>
+     <input type="text" id="oldSchoolName" class="form-control" placeholder="ระบุชื่อโรงเรียนที่กำลังศึกษาหรือจบการศึกษา" required>  
    </div>
    <div class="col-md-4">
      <label class="form-label">จังหวัด</label>
-     <input type="text" id="oldSchoolProvince" class="form-control" placeholder="ระบุจังหวัด">
+     <input type="text" id="oldSchoolProvince" class="form-control" placeholder="ระบุจังหวัด" required>
+     
    </div>
 </div>
            
@@ -790,6 +789,25 @@
         </div>
      </div>
   </div>
+  <div class="modal fade" id="docPreviewModal" tabindex="-1" aria-hidden="true" style="z-index: 1060;">
+  <div class="modal-dialog modal-xl modal-dialog-centered" style="height: 90vh;">
+    <div class="modal-content h-100">
+      <div class="modal-header bg-light py-2">
+        <h5 class="modal-title fs-6"><i class="bi bi-eye-fill me-2"></i>ตัวอย่างเอกสาร</h5>
+        <div class="ms-auto">
+          <a href="#" id="btnOpenOriginal" target="_blank" class="btn btn-sm btn-outline-primary me-2">
+            <i class="bi bi-box-arrow-up-right"></i> เปิดในแท็บใหม่
+          </a>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+      </div>
+      <div class="modal-body p-0 bg-dark d-flex justify-content-center align-items-center">
+        <iframe id="docFrame" src="" style="width:100%; height:100%; border:none;"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
   <footer class="text-center mt-4 mb-5" style="opacity: 0.8;">
   <p class="mb-0 text-secondary" style="font-size: 0.9rem;">
     &copy; 2026 ระบบรับสมัครนักเรียนออนไลน์
@@ -1665,34 +1683,64 @@ function validateThaiID(id) {
     }
 
     function doCheck() {
-       const id = el('checkIdCard').value;
-       if(id.length!==13) return Swal.fire('ผิดพลาด','กรุณาระบุเลขบัตร 13 หลัก','warning');
-       loading(1);
-       google.script.run.withSuccessHandler(r=>{
-          loading(0); const d = el('status-result');
-          if(r.found) {
-             const b = r.status==='อนุมัติ'?'bg-success':(r.status.includes('ตรวจสอบ')?'bg-warning':'bg-danger');
-             const btn = r.status==='ให้ปรับปรุงข้อมูล' ? `<button class="btn btn-warning w-100 mt-2 rounded-pill" onclick='openForm(null, ${JSON.stringify(r.fullData)})'><i class="bi bi-pencil me-1"></i> แก้ไขข้อมูล</button>` : '';
-             // สร้าง HTML แสดงเลขที่นั่งสอบ (ถ้ามีข้อมูล)
-      let seatHtml = "";
-      if (r.seatNo && String(r.seatNo).trim() !== "") {
-          seatHtml = `<div class="alert alert-info mt-2 fw-bold text-center" style="font-size: 1.2rem;">
-                  <i class="bi bi-ticket-perforated"></i> เลขที่นั่งสอบ: ${r.seatNo}
-                </div>`;
-      }
+    const id = el('checkIdCard').value;
+    if(id.length!==13) return Swal.fire('ผิดพลาด','กรุณาระบุเลขบัตร 13 หลัก','warning');
+    
+    loading(1);
+    
+    google.script.run.withSuccessHandler(r => {
+        loading(0); 
+        const d = el('status-result');
+        
+        if(r.found) {
+            // เก็บข้อมูลไว้ในตัวแปร Global เพื่อให้ปุ่มพิมพ์เรียกใช้ได้
+            foundStudentData = r; 
 
-        d.innerHTML = `<div class="card shadow-sm">
-                <div class="card-header ${b} text-white fw-bold">${r.status}</div>
-                <div class="card-body">
-                  <h5>${r.name}</h5>
-                  <p class="mb-1 text-muted">${r.applyType}</p>
-                  ${seatHtml} <p class="text-danger small">${r.reason}</p>
-                  ${btn}
-                </div>
-              </div>`;
-          } else d.innerHTML = '<div class="alert alert-secondary">ไม่พบข้อมูลการสมัครในระบบ</div>';
-       }).withFailureHandler(alertErr).checkStatus(id);
-    }
+            const b = r.status==='อนุมัติ' ? 'bg-success' : (r.status.includes('ตรวจสอบ') ? 'bg-warning' : 'bg-danger');
+            
+            // --- สร้างปุ่ม Action ตามสถานะ ---
+            let actionBtn = "";
+            
+            if (r.status === 'ให้ปรับปรุงข้อมูล') {
+                // ปุ่มแก้ไข
+                actionBtn = `<button class="btn btn-warning w-100 mt-2 rounded-pill shadow-sm" onclick='openForm(null, ${JSON.stringify(r.fullData)})'>
+                                <i class="bi bi-pencil me-1"></i> แก้ไขข้อมูล
+                             </button>`;
+            } else if (r.status === 'อนุมัติ') {
+                // ปุ่มพิมพ์บัตรสอบ (เรียก printCardUser)
+                actionBtn = `<button class="btn btn-primary w-100 mt-2 rounded-pill shadow-sm" onclick="printCardUser(foundStudentData)">
+                                <i class="bi bi-printer-fill me-1"></i> พิมพ์บัตรประจำตัวสอบ
+                             </button>`;
+            }
+
+            // แสดงเลขที่นั่งสอบ
+            let seatHtml = "";
+            if (r.seatNo && String(r.seatNo).trim() !== "") {
+                seatHtml = `<div class="alert alert-info mt-2 fw-bold text-center" style="font-size: 1.1rem;">
+                               <i class="bi bi-ticket-perforated"></i> เลขที่นั่งสอบ: ${r.seatNo}
+                            </div>`;
+            }
+
+            // แสดงผลลัพธ์
+            d.innerHTML = `<div class="card shadow-sm">
+                    <div class="card-header ${b} text-white fw-bold">${r.status}</div>
+                    <div class="card-body">
+                        <h5>${r.name}</h5>
+                        <p class="mb-1 text-muted">${r.applyType}</p>
+                        ${seatHtml} 
+                        ${r.reason ? `<div class="alert alert-danger py-1 small mt-2">${r.reason}</div>` : ''}
+                        
+                        <div class="mt-3 border-top pt-2">
+                            ${actionBtn}
+                        </div>
+                    </div>
+                  </div>`;
+                  
+        } else {
+            d.innerHTML = '<div class="alert alert-secondary text-center">ไม่พบข้อมูลการสมัครในระบบ</div>';
+        }
+    }).withFailureHandler(alertErr).checkStatus(id);
+}
 
 
     // --- Admin ---
@@ -1984,8 +2032,11 @@ function viewS(rowIndex) {
         }
     }
 
+    
+
     new bootstrap.Modal(document.getElementById('studentModal')).show();
 }
+
 // ฟังก์ชันวาดกราฟ (ใช้ซ้ำได้)
 let myCharts = {}; // ตัวแปรเก็บกราฟเก่าเพื่อทำลายก่อนวาดใหม่
 function drawChart(canvasId, label, dataObj, type) {
@@ -2148,42 +2199,48 @@ function filterTbl() {
     }
 }
     function viewS(i) {
-       curIdx=i; const s = allSt.find(x=>x.rowIndex===i);
-       let photoSrc = getDirectImg(s.photo);
-       
-       let btnConduct = (s.conduct && s.conduct.length > 5) 
-        ? `<a href="${s.conduct}" target="_blank" class="btn btn-sm btn-outline-info mt-1 w-100"><i class="bi bi-file-person"></i> ดูใบรับรองความประพฤติ</a>`
+    curIdx = i;
+    const s = allSt.find(x => x.rowIndex === i);
+    let photoSrc = getDirectImg(s.photo);
+
+    // 1. ปุ่มใบรับรองความประพฤติ
+    let btnConduct = (s.conduct && s.conduct.length > 5) 
+        ? `<a href="javascript:void(0)" onclick="previewDoc('${s.conduct}')" class="btn btn-sm btn-outline-info mt-1 w-100"><i class="bi bi-file-person"></i> ดูใบรับรองความประพฤติ</a>`
         : `<button class="btn btn-sm btn-light mt-1 w-100 text-muted" disabled>ไม่มีใบรับรองความประพฤติ</button>`;
 
-       let h = `<div class="row">
-          <div class="col-md-4 text-center mb-3">
-             <div class="card shadow-sm p-2">
-                <img src="${photoSrc}" class="img-fluid rounded" style="max-height:200px; object-fit:cover;">
-                <div class="mt-2 fw-bold text-primary">${s.appId}</div>
-             </div>
-             <a href="${s.transcript}" target="_blank" class="btn btn-sm btn-outline-dark mt-2 w-100"><i class="bi bi-file-earmark-text"></i> ดูใบ ปพ.1</a>
+    // 2. ปุ่มพิมพ์บัตรประจำตัวสอบ (สร้างรอไว้ก่อน)
+    let btnPrint = `<button onclick="printCard(${s.rowIndex})" class="btn btn-sm btn-success mt-2 w-100"><i class="bi bi-printer-fill"></i> พิมพ์บัตรประจำตัวสอบ</button>`;
 
-             ${btnConduct}
+    // 3. สร้าง HTML รวม (เอามารวมกันในตัวแปร h ตัวเดียว)
+    let h = `<div class="row">
+       <div class="col-md-4 text-center mb-3">
+          <div class="card shadow-sm p-2">
+             <img src="${photoSrc}" class="img-fluid rounded" style="max-height:200px; object-fit:cover;">
+             <div class="mt-2 fw-bold text-primary">${s.appId}</div>
+          </div>
+          
+          <a href="javascript:void(0)" onclick="previewDoc('${s.transcript}')" class="btn btn-sm btn-outline-dark mt-2 w-100"><i class="bi bi-file-earmark-text"></i> ดูใบ ปพ.1</a>
+          ${btnConduct}
+          ${btnPrint} </div>
+       <div class="col-md-8">
+          <h5 class="fw-bold text-primary border-bottom pb-2">${s.name}</h5>
+          <table class="table table-sm table-borderless">
+            <tr><th width="30%">เลขบัตร:</th><td>${s.idCard}</td></tr>
+            <tr><th>ระดับชั้น:</th><td>${s.level}</td></tr>
+            <tr><th>แผนการเรียน:</th><td>${s.plan}</td></tr>
+            <tr><th>สถานะ:</th><td><span class="badge bg-secondary">${s.status}</span></td></tr>
+            <tr class="table-light"><th colspan="2" class="pt-2 text-muted">ข้อมูลติดต่อผู้ปกครอง</th></tr>
+            <tr><td colspan="2">${s.fullData[31]}${s.fullData[32]} ${s.fullData[33]} (${s.fullData[34]})<br>โทร: <a href="tel:${s.fullData[36]}">${s.fullData[36]}</a></td></tr>
+          </table>
+          ${s.reason ? `<div class="alert alert-danger py-1"><small><b>หมายเหตุ:</b> ${s.reason}</small></div>` : ''}
+       </div>
+    </div>`;
 
-          </div>
-          <div class="col-md-8">
-             <h5 class="fw-bold text-primary border-bottom pb-2">${s.name}</h5>
-             <table class="table table-sm table-borderless">
-               <tr><th width="30%">เลขบัตร:</th><td>${s.idCard}</td></tr>
-               <tr><th>ระดับชั้น:</th><td>${s.level}</td></tr>
-               <tr><th>แผนการเรียน:</th><td>${s.plan}</td></tr>
-               <tr><th>สถานะ:</th><td><span class="badge bg-secondary">${s.status}</span></td></tr>
-               <tr class="table-light"><th colspan="2" class="pt-2 text-muted">ข้อมูลติดต่อผู้ปกครอง</th></tr>
-               <tr><td colspan="2">${s.fullData[31]}${s.fullData[32]} ${s.fullData[33]} (${s.fullData[34]})<br>โทร: <a href="tel:${s.fullData[36]}">${s.fullData[36]}</a></td></tr>
-             </table>
-             ${s.reason ? `<div class="alert alert-danger py-1"><small><b>หมายเหตุ:</b> ${s.reason}</small></div>` : ''}
-          </div>
-       </div>`;
-       el('mBody').innerHTML = h;
-       if (!myModal) { myModal = new bootstrap.Modal(el('sModal'), { focus: false }); }
-       myModal.show();
-    }
-   
+    // 4. แสดงผล
+    el('mBody').innerHTML = h;
+    if (!myModal) { myModal = new bootstrap.Modal(el('sModal'), { focus: false }); }
+    myModal.show();
+}
     function upSt(s) {
     Swal.fire({
         title: 'ระบุเหตุผล/หมายเหตุ',
@@ -2597,9 +2654,261 @@ function stopSimulatedProgress() {
     }, 500);
 }
 
+function previewDoc(url) {
+    if (!url) return;
 
+    let previewUrl = url;
+    // แปลงลิงก์ให้เป็นโหมด Preview เพื่อใส่ iframe
+    try {
+        let id = "";
+        if (url.indexOf('id=') > -1) id = url.split('id=')[1].split('&')[0];
+        else if (url.indexOf('/d/') > -1) id = url.split('/d/')[1].split('/')[0];
 
+        if (id) {
+            previewUrl = "https://drive.google.com/file/d/" + id + "/preview";
+        }
+    } catch (e) { console.log(e); }
+
+    // ตั้งค่า iframe และปุ่มสำรอง
+    document.getElementById('docFrame').src = previewUrl;
+    document.getElementById('btnOpenOriginal').href = url;
+
+    // เปิด Modal (ซ้อนทับ Modal นักเรียนได้เลย)
+    new bootstrap.Modal(document.getElementById('docPreviewModal')).show();
+}
+  
+  function printCard(rowIndex) {
+    const s = allSt.find(x => x.rowIndex === rowIndex);
+    if (!s) { alert("ไม่พบข้อมูล"); return; }
+
+    const schoolName = "โรงเรียนอรัญประเทศ";
+    const year = "2569";
+    const examSeatNo = s.fullData[47] || "-"; 
+    let photoUrl = getDirectImg(s.photo);
     
+    // ลิงก์โลโก้
+    const logoUrl = "https://drive.google.com/thumbnail?id=1orEjf83Ew6ygXmhqSyEmGawrvy0UUhGq&sz=w200";
+
+    let htmlContent = `
+    <html><head><title>บัตรสอบ - ${s.name}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        @page { size: A4; margin: 0; }
+        body { 
+            font-family: 'Sarabun', sans-serif; 
+            margin: 0; padding: 0; background: #eee; 
+            min-height: 100vh; display: flex; justify-content: center; align-items: center;
+        }
+        
+        .card-box { 
+            width: 160mm; height: 110mm; 
+            border: 5px double #0d6efd; 
+            background: #fff;
+            padding: 30px 40px; /* เพิ่ม Padding ให้ดูสมดุลเมื่อไม่มีลายเซ็น */
+            box-sizing: border-box;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            display: flex; 
+            flex-direction: column; 
+            /* justify-content: center; ถ้าอยากให้ข้อมูลอยู่กึ่งกลางแนวตั้ง ให้เปิดบรรทัดนี้ */
+        }
+
+        .header { 
+            text-align: center; border-bottom: 2px solid #ccc; 
+            padding-bottom: 15px; margin-bottom: 20px; 
+            display: flex; align-items: center; justify-content: center; gap: 15px; 
+        }
+        .logo { width: 70px; height: 70px; object-fit: contain; } 
+        .header-text { text-align: left; }
+        .header h2 { margin: 0; font-size: 24px; font-weight: bold; color: #0d6efd; line-height: 1.2; }
+        .header p { margin: 2px 0 0; font-size: 16px; color: #555; }
+
+        .content { 
+            display: flex; align-items: flex-start; 
+        }
+        .info-col { flex: 1; font-size: 16px; line-height: 1.8; padding-right: 20px; }
+        .photo-col { width: 110px; text-align: center; }
+        .photo { width: 100px; height: 125px; object-fit: cover; border: 1px solid #999; border-radius: 4px; background: #eee; }
+        
+        .row-item { display: flex; align-items: baseline; margin-bottom: 8px; white-space: nowrap; }
+        .label { font-weight: bold; width: 120px; color: #333; flex-shrink: 0; }
+        .seat-highlight { color: #d63384; font-weight: bold; font-size: 18px; background: #fff0f6; padding: 0 8px; border-radius: 4px; border: 1px dashed #d63384; }
+
+        .fab-print {
+            position: fixed; bottom: 20px; right: 20px;
+            background: #0d6efd; color: white; border: none;
+            width: 60px; height: 60px; border-radius: 50%;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            font-size: 30px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 999;
+        }
+
+        @media print { 
+            body { background: white; display: block; }
+            .card-box { 
+                box-shadow: none; border: 3px solid #000;
+                position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                width: 160mm; height: 110mm;
+            }
+            .no-print { display: none !important; }
+        }
+    </style>
+    </head><body>
+        <div class="card-box">
+            <div class="header">
+                <img src="${logoUrl}" class="logo">
+                <div class="header-text">
+                    <h2>บัตรประจำตัวผู้เข้าสอบ</h2>
+                    <p>${schoolName} | ประจำปีการศึกษา ${year}</p>
+                </div>
+            </div>
+            
+            <div class="content">
+                <div class="info-col">
+                    <div class="row-item"><span class="label">เลขที่นั่งสอบ:</span> <span class="seat-highlight">${examSeatNo}</span></div>
+                    <div class="row-item"><span class="label">ชื่อ-สกุล:</span> <span>${s.name}</span></div>
+                    <div class="row-item"><span class="label">เลขบัตรปชช.:</span> <span>${s.idCard}</span></div>
+                    <div class="row-item"><span class="label">ระดับชั้น:</span> <span>${s.level}</span></div>
+                    <div class="row-item"><span class="label">แผนการเรียน:</span> <span style="font-size:15px;">${s.plan}</span></div>
+                    <div class="row-item"><span class="label">สนามสอบ:</span> <span>${schoolName}</span></div>
+                </div>
+                <div class="photo-col">
+                    <img src="${photoUrl}" class="photo" onerror="this.src='https://via.placeholder.com/150?text=No+Photo'">
+                    <div style="font-size:11px; margin-top:5px; color:#666;">(รูปถ่าย)</div>
+                </div>
+            </div>
+        </div>
+        
+        <button class="fab-print no-print" onclick="window.print()">🖨️</button>
+
+    </body></html>
+    `;
+
+    // ตรวจสอบอุปกรณ์ Mobile/PC
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+    if (isMobile) {
+        let win = window.open('', '_blank');
+        if (win) {
+            win.document.write(htmlContent);
+            win.document.close();
+            setTimeout(() => { win.print(); }, 1500);
+        } else {
+            alert("กรุณาอนุญาตให้เปิด Pop-up เพื่อพิมพ์บัตร");
+        }
+    } else {
+        let iframe = document.getElementById('printFrame');
+        if (!iframe) {
+            iframe = document.createElement('iframe');
+            iframe.id = 'printFrame';
+            iframe.style.position = 'fixed'; 
+            iframe.style.right = '0'; iframe.style.bottom = '0';
+            iframe.style.width = '0'; iframe.style.height = '0'; iframe.style.border = '0';
+            document.body.appendChild(iframe);
+        }
+        let doc = iframe.contentWindow.document;
+        doc.open(); doc.write(htmlContent); doc.close();
+        iframe.contentWindow.focus();
+        setTimeout(function() { iframe.contentWindow.print(); }, 1000);
+    }
+}
+// ตัวแปรเก็บข้อมูลนักเรียนที่ค้นหาเจอ (User)
+let foundStudentData = null;
+
+// ฟังก์ชันพิมพ์บัตรสำหรับ User (ใช้ Template เดียวกับ V.10)
+function printCardUser(dataObj) {
+    if (!dataObj) { alert("ไม่พบข้อมูล"); return; }
+    
+    // แปลงข้อมูลจาก Object ที่ Server ส่งมา ให้เป็นรูปแบบที่ Template บัตรต้องการ
+    // fullData index: 0=Time, 1=AppID, ..., 5=Level, 6=Plan, ..., 13=IDCard, ..., 23=Photo
+    const s = {
+        name: dataObj.name,
+        seatNo: dataObj.seatNo || "-",
+        idCard: (dataObj.fullData && dataObj.fullData[17]) ? dataObj.fullData[17] : "-",
+        level: (dataObj.fullData && dataObj.fullData[5]) ? dataObj.fullData[5] : "-",
+        plan: (dataObj.fullData && dataObj.fullData[6]) ? dataObj.fullData[6] : "-",
+        photo: (dataObj.fullData && dataObj.fullData[43]) ? dataObj.fullData[43] : ""
+    };
+
+    const schoolName = "โรงเรียนอรัญประเทศ";
+    const year = "2569";
+    let photoUrl = getDirectImg(s.photo); 
+    const logoUrl = "https://drive.google.com/thumbnail?id=1orEjf83Ew6ygXmhqSyEmGawrvy0UUhGq&sz=w200";
+
+    // HTML บัตรสอบ (เหมือน V.10 เป๊ะ)
+    let htmlContent = `
+    <html><head><title>บัตรสอบ - ${s.name}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        @page { size: A4; margin: 0; }
+        body { font-family: 'Sarabun', sans-serif; margin: 0; padding: 0; background: #eee; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
+        .card-box { width: 160mm; height: 110mm; border: 5px double #0d6efd; background: #fff; padding: 30px 40px; box-sizing: border-box; display: flex; flex-direction: column; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .header { text-align: center; border-bottom: 2px solid #ccc; padding-bottom: 15px; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; gap: 15px; }
+        .logo { width: 70px; height: 70px; object-fit: contain; } 
+        .header h2 { margin: 0; font-size: 24px; font-weight: bold; color: #0d6efd; line-height: 1.2; }
+        .header p { margin: 2px 0 0; font-size: 16px; color: #555; }
+        .content { display: flex; align-items: flex-start; }
+        .info-col { flex: 1; font-size: 16px; line-height: 1.8; padding-right: 20px; }
+        .photo-col { width: 110px; text-align: center; }
+        .photo { width: 100px; height: 125px; object-fit: cover; border: 1px solid #999; border-radius: 4px; background: #eee; }
+        .row-item { display: flex; align-items: baseline; margin-bottom: 8px; white-space: nowrap; }
+        .label { font-weight: bold; width: 120px; color: #333; flex-shrink: 0; }
+        .seat-highlight { color: #d63384; font-weight: bold; font-size: 18px; background: #fff0f6; padding: 0 8px; border-radius: 4px; border: 1px dashed #d63384; }
+        .fab-print { position: fixed; bottom: 20px; right: 20px; background: #0d6efd; color: white; border: none; width: 60px; height: 60px; border-radius: 50%; font-size: 30px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 999; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        @media print { body { background: white; display: block; } .card-box { box-shadow: none; border: 3px solid #000; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 160mm; height: 110mm; } .no-print { display: none !important; } }
+    </style>
+    </head><body>
+        <div class="card-box">
+            <div class="header">
+                <img src="${logoUrl}" class="logo">
+                <div><h2>บัตรประจำตัวผู้เข้าสอบ</h2><p>${schoolName} | ประจำปีการศึกษา ${year}</p></div>
+            </div>
+            <div class="content">
+                <div class="info-col">
+                    <div class="row-item"><span class="label">เลขที่นั่งสอบ:</span> <span class="seat-highlight">${s.seatNo}</span></div>
+                    <div class="row-item"><span class="label">ชื่อ-สกุล:</span> <span>${s.name}</span></div>
+                    <div class="row-item"><span class="label">เลขบัตรปชช.:</span> <span>${s.idCard}</span></div>
+                    <div class="row-item"><span class="label">ระดับชั้น:</span> <span>${s.level}</span></div>
+                    <div class="row-item"><span class="label">แผนการเรียน:</span> <span style="font-size:15px;">${s.plan}</span></div>
+                    <div class="row-item"><span class="label">สนามสอบ:</span> <span>${schoolName}</span></div>
+                </div>
+                <div class="photo-col">
+                    <img src="${photoUrl}" class="photo" onerror="this.src='https://via.placeholder.com/150?text=No+Photo'">
+                    <div style="font-size:11px; margin-top:5px; color:#666;">(รูปถ่าย)</div>
+                </div>
+            </div>
+        </div>
+        <button class="fab-print no-print" onclick="window.print()">🖨️</button>
+    </body></html>`;
+
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+        let win = window.open('', '_blank');
+        if (win) { win.document.write(htmlContent); win.document.close(); setTimeout(() => win.print(), 1500); }
+        else { alert("กรุณาอนุญาตให้เปิด Pop-up"); }
+    } else {
+        let iframe = document.getElementById('printFrame');
+        if (!iframe) {
+            iframe = document.createElement('iframe');
+            iframe.id = 'printFrame'; iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+            document.body.appendChild(iframe);
+        }
+        let doc = iframe.contentWindow.document;
+        doc.open(); doc.write(htmlContent); doc.close();
+        iframe.contentWindow.focus();
+        setTimeout(() => iframe.contentWindow.print(), 1000);
+    }
+}
+
+// ตั้งค่าให้ช่อง text-eng พิมพ์ได้เฉพาะภาษาอังกฤษ
+document.querySelectorAll('.text-eng').forEach(function(el) {
+    el.addEventListener('input', function() {
+        // ยอมให้พิมพ์: A-Z, a-z, ช่องว่าง, จุด(.), ขีด(-)
+        // ลบตัวอักษรอื่นออก (เช่น ภาษาไทย, ตัวเลข)
+        this.value = this.value.replace(/[^a-zA-Z\s.-]/g, '');
+    });
+});
+
   </script>
   <div class="modal fade" id="studentModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
