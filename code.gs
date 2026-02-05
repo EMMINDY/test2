@@ -182,6 +182,7 @@ function checkStatus(idCard) {
   
   // ค้นหาจากล่างขึ้นบน
   for(let i=data.length-1; i>=1; i--) {
+     // ตรวจสอบเลขบัตร (ตามที่คุณระบุว่าเป็นคอลัมน์ index 17)
      if(String(data[i][17]).replace(/'/g,'').trim() === String(idCard).trim()) {
         const safeData = data[i].map(c => (c instanceof Date) ? formatDate(c) : String(c));
         
@@ -192,7 +193,10 @@ function checkStatus(idCard) {
            reason: data[i][4], 
            applyType: data[i][2],
            seatNo: data[i][47], 
-           fullData: (data[i][3]==='ให้ปรับปรุงข้อมูล') ? safeData : null
+           
+           // --- [จุดที่แก้ไข] --- 
+           // เพิ่ม || data[i][3]==='อนุมัติ' เพื่อให้ User เอาข้อมูลไปพิมพ์บัตรได้
+           fullData: (data[i][3]==='ให้ปรับปรุงข้อมูล' || data[i][3]==='อนุมัติ') ? safeData : null
         };
      }
   }
@@ -229,13 +233,13 @@ function getAdminData() {
         level: row[5],
         plan: row[6],
         name: row[7] + row[8] + " " + row[9], 
-        idCard: String(row[13]).replace(/'/g, ''),
+        idCard: String(row[17]).replace(/'/g, ''),
         
         phone: String(row[14]).replace(/'/g, ''),
       
-        photo: row[39],      
-        transcript: row[40], 
-        conduct: row[41],
+        photo: row[43],      
+        transcript: row[44], 
+        conduct: row[45],
         // ----------------------------------------
 
         fullData: row
