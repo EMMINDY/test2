@@ -807,6 +807,41 @@
     </div>
   </div>
 </div>
+<style>
+  .line-float-btn {
+    position: fixed;
+    bottom: 25px;
+    right: 25px;
+    z-index: 9999; /* ให้ลอยอยู่เหนือทุกอย่าง */
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background-color: #06C755; /* สีเขียว LINE */
+    color: white !important;
+    text-decoration: none;
+    border-radius: 50px; /* ทรงแคปซูลมนๆ */
+    font-family: 'Sarabun', sans-serif; /* ใช้ฟอนต์เดียวกับเว็บ */
+    font-weight: 600;
+  }
+
+  .line-float-btn:hover {
+    transform: translateY(-3px); /* ขยับขึ้นนิดนึงตอนเอาเมาส์ชี้ */
+    box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+    background-color: #05b54d;
+  }
+
+  .line-icon {
+    font-size: 24px;
+  }
+</style>
+
+<a href="https://line.me/ti/g2/Z5WNo7tXT5nQP1LnY-_1E9OKqRnLJc-JQ4635g?utm_source=invitation&utm_medium=link_copy&utm_campaign=default" target="_blank" class="line-float-btn">
+  <i class="bi bi-line line-icon"></i>
+  <span>แจ้งปัญหาการใช้งาน</span>
+</a>
 
   <footer class="text-center mt-4 mb-5" style="opacity: 0.8;">
   <p class="mb-0 text-secondary" style="font-size: 0.9rem;">
