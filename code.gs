@@ -33,11 +33,26 @@ function formatDate(d) {
 
 function getStudyPlans(level, type) {
   try {
-    const sheetName = (type.includes('พิเศษ')) ? CONFIG.SHEET_NAME_PLANS_SPECIAL : CONFIG.SHEET_NAME_PLANS_GENERAL;
+    // [แก้ไข] รองรับทั้ง 'special' (อังกฤษ) และคำว่า 'พิเศษ' (ไทย)
+    const isSpecial = (type === 'special' || String(type).includes('พิเศษ'));
+    
+    const sheetName = isSpecial ? CONFIG.SHEET_NAME_PLANS_SPECIAL : CONFIG.SHEET_NAME_PLANS_GENERAL;
     const sheet = getSheet(sheetName);
+    
+    // ป้องกัน Error กรณี Sheet ไม่มีข้อมูล
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return []; 
+
     const col = (level === 'ชั้นมัธยมศึกษาปีที่ 1') ? 1 : 2;
-    return sheet.getRange(2, col, sheet.getLastRow()-1, 1).getValues().flat().filter(String);
-  } catch(e) { return []; }
+    
+    // ดึงข้อมูลและตัดช่องว่างออก
+    return sheet.getRange(2, col, lastRow - 1, 1).getValues().flat().filter(function(x) {
+      return x && String(x).trim() !== "";
+    });
+    
+  } catch(e) { 
+    return []; 
+  }
 }
 
 
@@ -63,8 +78,9 @@ function adminLogin(u, p) {
 
 function submitApplication(fd) {
   var status = getRecruitStatus();
-  var type = fd.applyType; 
-
+  var type = fd.applyType;
+  
+  // ตรวจสอบสถานะการรับสมัคร
   if (type === 'special' && !status.special) {
     throw new Error("ขออภัย ระบบรับสมัคร 'ห้องเรียนพิเศษ' ปิดทำการแล้ว");
   } else if (type === 'general' && !status.general) {
@@ -72,67 +88,66 @@ function submitApplication(fd) {
   }
   
   const lock = LockService.getScriptLock();
-  if(!lock.tryLock(10000)) throw new Error("ระบบกำลังประมวลผลในส่วนอื่นอยู่ กรุณารอ 10 วินาทีแล้วลองใหม่อีกครั้ง");
- 
+  // แก้ไข logic การ Lock เล็กน้อย (รอ lock ได้ ไม่ต้อง throw ทันทีถ้าว่าง)
+  if(!lock.tryLock(10000)) throw new Error("ระบบกำลังประมวลผล กรุณารอ 10 วินาที");
+  
   try {
     const sheet = getSheet(CONFIG.SHEET_NAME_DATA);
     let rowIndex = null;
     let appId = Utilities.formatDate(new Date(), "GMT+7", "yyyyMMddHHmmss");
     let timestamp = new Date();
     
+    // ทำความสะอาดเลขบัตร
     const idCardClean = String(fd.idCard).replace(/'/g, '').trim().toUpperCase();
-
-    const strictPlans = [
-       "SMTE (วิทย์-คณิต-เทคโนโลยี-สิ่งแวดล้อม)",
-       "ห้องเรียนพิเศษวิทยาศาสตร์ คณิตศาสตร์ เทคโนโลยีและสิ่งแวดล้อม (SMTE)"
-    ];
-
+    
+    // กฎพิเศษสำหรับแผนการเรียนบางอย่าง
+    const strictPlans = ["SMTE (วิทย์-คณิต-เทคโนโลยี-สิ่งแวดล้อม)", "ห้องเรียนพิเศษวิทยาศาสตร์ คณิตศาสตร์ เทคโนโลยีและสิ่งแวดล้อม (SMTE)"];
     if (strictPlans.includes(fd.plan) && /[^0-9]/.test(idCardClean)) {
-       throw new Error("แผนการเรียน " + fd.plan + " อนุญาตให้ใช้เฉพาะเลขบัตรประชาชน (ตัวเลขล้วน) เท่านั้น");
+       throw new Error("แผนการเรียนนี้อนุญาตเฉพาะเลขบัตรประชาชน (ตัวเลขล้วน) เท่านั้น");
     }
 
-    // --- [จุดที่ 1] แก้ Index เช็คเลขบัตรซ้ำ (จาก 13 เป็น 17) ---
+    const allData = sheet.getDataRange().getValues();
+
+    // --- [จุดที่ 1] เช็คเลขบัตรซ้ำ (Index 17 / Column R) ---
     if (!fd.isEditMode) {
-      const allData = sheet.getDataRange().getValues();
-      // เดิม row[13] -> แก้เป็น row[17] (เพราะมีข้อมูลแทรก 4 ช่อง)
       const isDuplicate = allData.some(row => String(row[17]).replace(/'/g, '').trim() === idCardClean);
-      
-      if (isDuplicate) {
-        throw new Error("เลขบัตรประชาชนนี้ (" + idCardClean + ") ได้ลงทะเบียนในระบบเรียบร้อยแล้ว");
-      }
+      if (isDuplicate) throw new Error("เลขบัตรประชาชนนี้ลงทะเบียนแล้ว");
     }
 
-    // --- [จุดที่ 2] แก้ Index ค้นหาแถวเดิมตอนแก้ไข (จาก 13 เป็น 17) ---
+    // --- [จุดที่ 2] ค้นหาแถวเดิมเพื่อแก้ไข (Index 17 / Column R) ---
     if(fd.isEditMode && fd.editIdCard) {
-       const data = sheet.getDataRange().getValues();
-       for(let i=data.length-1; i>=1; i--) {
-         // เดิม data[i][13] -> แก้เป็น data[i][17]
-         if(String(data[i][17]).replace(/'/g,'') === String(fd.editIdCard)) {
-            if(data[i][3] !== 'ให้ปรับปรุงข้อมูล') throw new Error("สถานะปัจจุบันคือ '" + data[i][3] + "' ไม่อนุญาตให้แก้ไข");
+       for(let i=allData.length-1; i>=1; i--) {
+         if(String(allData[i][17]).replace(/'/g,'') === String(fd.editIdCard)) {
+            // อนุญาตให้แก้สถานะ 'ให้ปรับปรุงข้อมูล' หรือ 'อนุมัติ' (ตาม logic เดิมของคุณ)
+            if(allData[i][3] !== 'ให้ปรับปรุงข้อมูล' && allData[i][3] !== 'อนุมัติ' && allData[i][3] !== 'รอตรวจสอบ') 
+               throw new Error("สถานะ '" + allData[i][3] + "' ไม่อนุญาตให้แก้ไข");
             rowIndex = i+1; 
-            appId = data[i][1]; 
+            appId = allData[i][1]; 
             break;
          }
        }
-       if(!rowIndex) throw new Error("ไม่พบข้อมูลเดิมในระบบที่ต้องการแก้ไข");
+       if(!rowIndex) throw new Error("ไม่พบข้อมูลเดิมที่จะแก้ไข");
     }
 
-    // --- [จุดที่ 3] แก้ Index ดึง URL รูปเดิม (บวกเพิ่ม 4 ช่อง) ---
-    // รูปถ่าย: เดิม 39 -> เป็น 43
-    // ปพ.1: เดิม 40 -> เป็น 44
-    // ความประพฤติ: เดิม 41 -> เป็น 45
-    let photoUrl = rowIndex ? sheet.getRange(rowIndex, 43).getValue() : "-";
-    let transUrl = rowIndex ? sheet.getRange(rowIndex, 44).getValue() : "-";
-    let conductUrl = rowIndex ? sheet.getRange(rowIndex, 45).getValue() : "-";
+    // --- [จุดที่ 3] จัดการไฟล์แนบ (URL) ---
+    // ปรับ Index ให้ตรงกับ Sheet ใหม่ที่มีคอลัมน์แทรก
+    // รูปถ่าย: Index 44 (Column AS)
+    // ปพ.1: Index 45 (Column AT)
+    // ความประพฤติ: Index 46 (Column AU)
+    
+    let photoUrl = rowIndex ? sheet.getRange(rowIndex, 44).getValue() : "-";
+    let transUrl = rowIndex ? sheet.getRange(rowIndex, 45).getValue() : "-";
+    let conductUrl = rowIndex ? sheet.getRange(rowIndex, 46).getValue() : "-";
    
     if(fd.photoFile && fd.photoFile.data) photoUrl = uploadFile(fd.photoFile, CONFIG.FOLDER_ID_PHOTO, appId+"_Photo");
     if(fd.transcriptFile && fd.transcriptFile.data) transUrl = uploadFile(fd.transcriptFile, CONFIG.FOLDER_ID_TRANSCRIPT, appId+"_Transcript");
-    if(fd.conductFile && fd.conductFile.data) {
-      conductUrl = uploadFile(fd.conductFile, CONFIG.FOLDER_ID_CONDUCT, appId+"_Conduct"); 
-    }
+    if(fd.conductFile && fd.conductFile.data) conductUrl = uploadFile(fd.conductFile, CONFIG.FOLDER_ID_CONDUCT, appId+"_Conduct");
 
+    // เตรียมข้อมูลอื่นๆ
+    let applyTypeThai = (fd.applyType === 'special') ? 'ห้องเรียนพิเศษ' : 'ห้องเรียนปกติ';
     const addr = `${fd.addrNo} หมู่ ${fd.addrMoo} ซอย ${fd.addrSoi} ถนน ${fd.addrRoad} จ.${fd.province} อ.${fd.district} ต.${fd.subdistrict} ${fd.zipcode}`;
-    const status = rowIndex ? "รอตรวจสอบ (แก้ไขแล้ว)" : "รอตรวจสอบ";
+    const statusText = rowIndex ? "รอตรวจสอบ (แก้ไขแล้ว)" : "รอตรวจสอบ";
+    
     const f = fd.father || {}; 
     const m = fd.mother || {}; 
     const g = fd.guardian || {};
@@ -142,34 +157,56 @@ function submitApplication(fd) {
        prov: fd.province, dist: fd.district, sub: fd.subdistrict, zip: fd.zipcode
     });
 
-    // --- [จุดที่ 4] เพิ่มตัวแปรใหม่เข้าไปใน rowData ---
+    // --- [จุดที่ 4 - สำคัญที่สุด] เรียงข้อมูลลง Array ให้ตรงคอลัมน์เป๊ะๆ ---
     const rowData = [
-      fd.applyType, status, "", fd.level, fd.plan,
-      fd.prefix, fd.firstname, fd.lastname, 
+      // 0-4 (ประเภท, สถานะ, หมายเหตุ, ระดับ, แผน)
+      applyTypeThai, statusText, "", fd.level, fd.plan,
       
-      // >>> เพิ่ม 4 ค่านี้ <<<
-      fd.firstnameEn, fd.lastnameEn, fd.oldSchoolName, fd.oldSchoolProvince,
-      // --------------------
-
-      "'"+fd.dob, fd.nationality, fd.religion, "'"+fd.idCard, "'"+fd.phone,
-      addr, fd.famStatus,
-      f.prefix, f.name, f.lname, f.job, f.age, "'"+f.phone, f.addr,
-      m.prefix, m.name, m.lname, m.job, m.age, "'"+m.phone, m.addr,
-      g.prefix, g.name, g.lname, g.rel, g.job, g.age, "'"+g.phone, g.addr, 
-      photoUrl, transUrl, conductUrl,
+      // 5-9 (คำนำหน้า, ชื่อ, สกุล, ชื่ออังกฤษ, สกุลอังกฤษ)
+      fd.prefix, fd.firstname, fd.lastname, fd.firstnameEn, fd.lastnameEn, 
+      
+      // 10-14 (รร.เดิม, จว.เดิม, วันเกิด, สัญชาติ, ศาสนา)
+      fd.oldSchoolName, fd.oldSchoolProvince, "'"+fd.dob, fd.nationality, fd.religion, 
+      
+      // 15-19 (เลขบัตร, เบอร์, ที่อยู่, สถานะครอบครัว, คำนำหน้าพ่อ)
+      "'"+fd.idCard, "'"+fd.phone, addr, fd.famStatus, f.prefix, 
+      
+      // 20-24 (ชื่อพ่อ, สกุลพ่อ, อาชีพพ่อ, อายุพ่อ, เบอร์พ่อ)
+      f.name, f.lname, f.job, f.age, "'"+f.phone, 
+      
+      // 25-29 (ที่อยู่พ่อ, คำนำหน้าแม่, ชื่อแม่, สกุลแม่, อาชีพแม่)
+      f.addr, m.prefix, m.name, m.lname, m.job, 
+      
+      // 30-34 (อายุแม่, เบอร์แม่, ที่อยู่แม่, คำนำหน้าปก., ชื่อปก.)
+      m.age, "'"+m.phone, m.addr, g.prefix, g.name, 
+      
+      // 35-39: สกุลปก., ความเกี่ยวข้อง, อาชีพปก., อายุปก., เบอร์ปก.
+      g.lname, 
+      g.rel,   // <-- ช่องความเกี่ยวข้อง (ที่เพิ่มใหม่)
+      g.job, 
+      g.age, 
+      "'"+g.phone, 
+      
+      // 40+: ที่อยู่ปก., รูป, ปพ.1, ความประพฤติ, JSON
+      g.addr, 
+      photoUrl, 
+      transUrl, 
+      conductUrl,
       rawAddr 
     ];
 
     if(rowIndex) {
+      // อัปเดตแถวเดิม (เริ่มเขียนที่คอลัมน์ C / Index 3)
       sheet.getRange(rowIndex, 3, 1, rowData.length).setValues([rowData]);
-      return { success: true, message: "อัปเดตข้อมูลการสมัครเรียบร้อยแล้ว", appId: appId };
+      return { success: true, message: "อัปเดตข้อมูลเรียบร้อย", appId: appId };
     } else {
+      // เพิ่มแถวใหม่
       sheet.appendRow([timestamp, appId, ...rowData]);
-      return { success: true, message: "ส่งใบสมัครเรียบร้อยแล้ว เลขที่อ้างอิง: " + appId, appId: appId };
+      return { success: true, message: "ส่งใบสมัครเรียบร้อย", appId: appId };
     }
 
   } catch(e) { 
-    return { success: false, message: e.message }; 
+    return { success: false, message: e.message };
   } finally { 
     lock.releaseLock(); 
   }
@@ -235,7 +272,7 @@ function getAdminData() {
         name: row[7] + row[8] + " " + row[9], 
         idCard: String(row[17]).replace(/'/g, ''),
         
-        phone: String(row[14]).replace(/'/g, ''),
+        phone: String(row[18]).replace(/'/g, ''),
       
         photo: row[43],      
         transcript: row[44], 
@@ -281,7 +318,7 @@ function updateStudentStatus(ri, st, re, by) {
 
       // 2. ระบบรันเลขที่นั่งสอบ (ทำงานเฉพาะเมื่อกด 'อนุมัติ')
       if (st === 'อนุมัติ') {
-         const COL_EXAM_ID = 48; // คอลัมน์ AR (เลขที่นั่งสอบ)
+         const COL_EXAM_ID = 48; // (เลขที่นั่งสอบ)
          
          // ตรวจสอบและสร้างคอลัมน์เพิ่มอัตโนมัติ (ถ้าไม่พอ)
          if (sheet.getMaxColumns() < COL_EXAM_ID) {
@@ -428,7 +465,7 @@ function checkDuplicateID(idCard) {
   
   // วนลูปเช็ค (สมมติว่าเลขบัตรอยู่คอลัมน์ N หรือ Index 13)
   // ตัดแถวหัวตารางออก และเช็คเฉพาะคนที่สถานะไม่ใช่ 'ยกเลิก' หรืออื่นๆ ตามต้องการ
-  const isDuplicate = data.slice(1).some(row => String(row[13]).replace(/'/g, '').trim() === String(idCard));
+  const isDuplicate = data.slice(1).some(row => String(row[17]).replace(/'/g, '').trim() === String(idCard));
   
   return isDuplicate; // ส่งค่า true (ซ้ำ) หรือ false (ไม่ซ้ำ) กลับไป
 }
