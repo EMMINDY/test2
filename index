@@ -345,67 +345,96 @@
         <input type="hidden" id="applyType"><input type="hidden" id="isEditMode" value="false"><input type="hidden" id="editIdCard">
        
         <h5 class="section-title">1. ข้อมูลส่วนตัวนักเรียน</h5>
-        <div class="row g-3">
-           <div class="col-md-6"><label class="form-label">ระดับชั้นที่สมัคร <span class="req-star">*</span></label><select id="level" class="form-select" required onchange="loadPlans()"><option value="">เลือก</option><option value="ชั้นมัธยมศึกษาปีที่ 1">ม.1</option><option value="ชั้นมัธยมศึกษาปีที่ 4">ม.4</option></select></div>
-           <div class="col-md-6"><label class="form-label">แผนการเรียน <span class="req-star">*</span></label><select id="plan" class="form-select" required><option value="">- กรุณาเลือกระดับชั้นก่อน -</option></select></div>
-           
-           <div class="col-md-2"><label class="form-label">คำนำหน้า</label><select id="prefix" class="form-select"><option>เด็กชาย</option><option>เด็กหญิง</option><option>นาย</option><option>นางสาว</option></select></div>
-           <div class="col-md-5"><label class="form-label">ชื่อจริง <span class="req-star">*</span></label><input type="text" id="firstname" class="form-control text-only" required placeholder="ไม่ต้องใส่คำนำหน้า"></div>
-           <div class="col-md-5"><label class="form-label">นามสกุล <span class="req-star">*</span></label><input type="text" id="lastname" class="form-control text-only" required></div>
-
-  <div class="col-md-6">
-  <label class="form-label">ชื่อจริง (ภาษาอังกฤษ)</label>
-  <input type="text" id="firstnameEn" class="form-control text-eng" placeholder="English First Name">
-</div>
-<div class="col-md-6">
-  <label class="form-label">นามสกุล (ภาษาอังกฤษ)</label>
-  <input type="text" id="lastnameEn" class="form-control text-eng" placeholder="English Last Name">
-</div>
-
 <div class="row g-3">
+   <div class="col-md-4">
+     <label class="form-label">ระดับชั้นที่สมัคร <span class="req-star">*</span></label>
+     <select id="level" class="form-select" required onchange="loadPlans()">
+       <option value="">เลือก</option>
+       <option value="ชั้นมัธยมศึกษาปีที่ 1">ม.1</option>
+       <option value="ชั้นมัธยมศึกษาปีที่ 4">ม.4</option>
+     </select>
+   </div>
    <div class="col-md-8">
-     <label class="form-label">จบจากโรงเรียน (โรงเรียนเดิม) </label>
-     <input type="text" id="oldSchoolName" class="form-control" placeholder="ระบุชื่อโรงเรียนที่กำลังศึกษาหรือจบการศึกษา" required>  
+     <label class="form-label">แผนการเรียน <span class="req-star">*</span></label>
+     <select id="plan" class="form-select" required>
+       <option value="">- กรุณาเลือกระดับชั้นก่อน -</option>
+     </select>
+   </div>
+   
+   <div class="col-md-2">
+     <label class="form-label">คำนำหน้า <span class="req-star">*</span></label>
+     <select id="prefix" class="form-select">
+       <option>เด็กชาย</option>
+       <option>เด็กหญิง</option>
+       <option>นาย</option>
+       <option>นางสาว</option>
+     </select>
+   </div>
+   <div class="col-md-5">
+     <label class="form-label">ชื่อจริง (ภาษาไทย) <span class="req-star">*</span></label>
+     <input type="text" id="firstname" class="form-control text-only" required placeholder="ไม่ต้องใส่คำนำหน้า">
+   </div>
+   <div class="col-md-5">
+     <label class="form-label">นามสกุล (ภาษาไทย) <span class="req-star">*</span></label>
+     <input type="text" id="lastname" class="form-control text-only" required>
+   </div>
+
+   <div class="col-md-6">
+     <label class="form-label">ชื่อจริง (ภาษาอังกฤษ) <span class="req-star">*</span></label>
+     <input type="text" id="firstnameEn" class="form-control text-eng" placeholder="English First Name" required>
+   </div>
+   <div class="col-md-6">
+     <label class="form-label">นามสกุล (ภาษาอังกฤษ) <span class="req-star">*</span></label>
+     <input type="text" id="lastnameEn" class="form-control text-eng" placeholder="English Last Name" required>
+   </div>
+
+    <div class="col-md-4">
+     <label class="form-label">วันเกิด <span class="req-star">*</span></label>
+     <input type="date" id="dob" class="form-control" required>
    </div>
    <div class="col-md-4">
-     <label class="form-label">จังหวัด</label>
-     <input type="text" id="oldSchoolProvince" class="form-control" placeholder="ระบุจังหวัด" required>
-     
+      <label class="form-label">สัญชาติ <span class="req-star">*</span></label>
+      <select id="nationality" class="form-select" onchange="toggleOther('nationality', 'nationality_other')">
+          <option value="ไทย">ไทย</option>
+          <option value="กัมพูชา">กัมพูชา</option>
+          <option value="อื่นๆ">อื่นๆ (โปรดระบุ)</option>
+      </select>
+      <input type="text" id="nationality_other" class="form-control mt-2 hidden" placeholder="ระบุสัญชาติ">
+   </div>
+   <div class="col-md-4">
+      <label class="form-label">ศาสนา <span class="req-star">*</span></label>
+      <select id="religion" class="form-select" onchange="toggleOther('religion', 'religion_other')">
+          <option value="พุทธ">พุทธ</option>
+          <option value="อิสลาม">อิสลาม</option>
+          <option value="คริสต์">คริสต์</option>
+          <option value="อื่นๆ">อื่นๆ (โปรดระบุ)</option>
+      </select>
+      <input type="text" id="religion_other" class="form-control mt-2 hidden" placeholder="ระบุศาสนา">
+   </div>
+
+   <div class="col-12">
+     <label class="form-label">เลขบัตรประชาชน (13 หลัก) <span class="req-star">*</span></label>
+     <div class="digit-container" id="idCard-container"></div>
+     <input type="hidden" id="idCard">
+   </div>
+
+   <div class="col-12">
+     <label class="form-label">เบอร์โทรศัพท์ (10 หลัก) <span class="req-star">*</span></label>
+     <div class="digit-container" id="phone-container"></div>
+     <input type="hidden" id="phone">
+   </div>
+
+   <div class="col-md-8">
+     <label class="form-label">จบจากโรงเรียน (โรงเรียนเดิม) <span class="req-star">*</span></label>
+     <input type="text" id="oldSchoolName" class="form-control" placeholder="ระบุชื่อโรงเรียนเดิม (ไม่ต้องใส่คำว่า โรงเรียน)" required>  
+   </div>
+   <div class="col-md-4">
+     <label class="form-label">จังหวัดโรงเรียนเดิม <span class="req-star">*</span></label>
+     <select id="oldSchoolProvince" class="form-select" required>
+        <option value="">เลือกจังหวัด</option>
+     </select>
    </div>
 </div>
-           
-           <div class="col-md-4"><label class="form-label">วันเกิด <span class="req-star">*</span></label><input type="date" id="dob" class="form-control" required></div>
-           <div class="col-md-4">
-                <label class="form-label">สัญชาติ</label>
-                   <select id="nationality" class="form-select" onchange="toggleOther('nationality', 'nationality_other')">
-                      <option value="ไทย">ไทย</option>
-                      <option value="กัมพูชา">กัมพูชา</option>
-                      <option value="อื่นๆ">อื่นๆ (โปรดระบุ)</option>
-                     </select>
-                  <input type="text" id="nationality_other" class="form-control mt-2 hidden" placeholder="ระบุสัญชาติ">
-                </div>
-          <div class="col-md-4">
-                <label class="form-label">ศาสนา</label>
-                     <select id="religion" class="form-select" onchange="toggleOther('religion', 'religion_other')">
-                        <option value="พุทธ">พุทธ</option>
-                        <option value="อิสลาม">อิสลาม</option>
-                        <option value="คริสต์">คริสต์</option>
-                        <option value="อื่นๆ">อื่นๆ (โปรดระบุ)</option>
-                      </select>
-                    <input type="text" id="religion_other" class="form-control mt-2 hidden" placeholder="ระบุศาสนา">
-                  </div>
-           
-           <div class="col-12">
-             <label class="form-label">เลขบัตรประชาชน (13 หลัก) <span class="req-star">*</span></label>
-             <div class="digit-container" id="idCard-container"></div>
-             <input type="hidden" id="idCard">
-           </div>
-           <div class="col-12">
-             <label class="form-label">เบอร์โทรศัพท์ (10 หลัก) <span class="req-star">*</span></label>
-             <div class="digit-container" id="phone-container"></div>
-             <input type="hidden" id="phone">
-           </div>
-        </div>
 
         <h5 class="section-title">2. ข้อมูลที่อยู่</h5>
         <div class="row g-3">
@@ -807,6 +836,8 @@
     </div>
   </div>
 </div>
+
+
 <style>
   .line-float-btn {
     position: fixed;
@@ -843,6 +874,7 @@
   <span>แจ้งปัญหาการใช้งาน</span>
 </a>
 
+
   <footer class="text-center mt-4 mb-5" style="opacity: 0.8;">
   <p class="mb-0 text-secondary" style="font-size: 0.9rem;">
     &copy; 2026 ระบบรับสมัครนักเรียนออนไลน์
@@ -855,6 +887,49 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+
+
+  document.addEventListener('DOMContentLoaded', function() {
+    // หน่วงเวลาเล็กน้อยเพื่อให้หน้าเว็บหลักพร้อมก่อนแสดง Popup
+    setTimeout(function() {
+      Swal.fire({
+        title: 'กรุณาเตรียมหลักฐานการสมัคร',
+        html: `
+          <div style="text-align: left; font-family: 'Sarabun', sans-serif; font-size: 16px; color: #333;">
+            <div style="margin-bottom: 10px;">
+              <strong>1.</strong> ไฟล์รูปถ่ายชุดนักเรียนหน้าตรง
+            </div>
+            <div style="margin-bottom: 10px;">
+              <strong>2.</strong> ไฟล์ระเบียนแสดงผลการเรียน (ปพ.1) 5 ภาคเรียน
+            </div>
+            <div style="margin-bottom: 15px;">
+              <strong>3.</strong> ไฟล์ใบรับรองความประพฤติ
+            </div>
+            
+            <div style="background-color: #fff0f6; border: 1px dashed #d63384; padding: 15px; border-radius: 10px; font-size: 14px; color: #d63384; line-height: 1.6;">
+              <strong><u>หมายเหตุ:</u></strong><br>
+              • ขนาดไฟล์ไม่เกิน 10 MB<br>
+              • รองรับไฟล์: PDF, PNG, JPEG<br>
+              • <span style="color: #c2185b; font-weight: bold;">ยกเว้นไฟล์รูปถ่าย</span> ให้ใช้เป็น PNG, JPEG เท่านั้น<br>
+              • <strong>ไม่ต้องรับรองสำเนาถูกต้อง</strong>
+            </div>
+          </div>
+        `,
+        icon: 'info',
+        width: '550px',
+        confirmButtonText: 'รับทราบ',
+        confirmButtonColor: '#d63384',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+             const container = Swal.getContainer();
+             if(container) container.style.zIndex = '10000';
+        }
+      });
+    }, 500); 
+  });
+
+  
     let addrDB=[], allSt=[], curIdx=null, aRole=0, aName="";
     let myModal = null; // Detail Modal
     let statModal = null; // Stat Modal
@@ -1516,37 +1591,85 @@ function validateThaiID(id) {
   // 1. เช็คว่ามีการเลือกไฟล์ไหม
   if (input.files && input.files[0]) {
     var file = input.files[0];
-    
-    // 2. เช็คขนาดไฟล์ไม่ให้เกิน 10 MB
-    if(file.size > 15 * 1024 * 1024) {
-        Swal.fire('แจ้งเตือน', 'ขนาดไฟล์ต้องไม่เกิน 15 MB', 'warning');
-        input.value = ''; 
-        return;
+    var fileName = file.name;
+    var fileSize = file.size;
+    var extension = fileName.split('.').pop().toLowerCase(); // ดึงนามสกุลไฟล์มาเช็ค
+
+    // -----------------------------------------------------------
+    // ส่วนที่แก้ไข: เช็คขนาดไฟล์ไม่ให้เกิน 10 MB
+    // -----------------------------------------------------------
+    if (fileSize > 10 * 1024 * 1024) { // 10 MB
+      Swal.fire({
+        icon: 'warning',
+        title: 'ขนาดไฟล์เกินกำหนด',
+        text: 'ขนาดไฟล์ต้องไม่เกิน 10 MB',
+        confirmButtonColor: '#d63384'
+      });
+      input.value = ''; // ล้างค่าไฟล์ที่เลือกออก
+      return; // จบการทำงานทันที
     }
 
-    var reader = new FileReader();
+    // -----------------------------------------------------------
+    // ส่วนที่เพิ่มใหม่: ตรวจสอบนามสกุลไฟล์ตามเงื่อนไข
+    // -----------------------------------------------------------
     
+    // กรณีที่ 1: ถ้าเป็นช่องรูปถ่าย (เช็คจาก id ที่ส่งเข้ามา)
+    if (id === 'photo64') {
+      if (!['png', 'jpeg', 'jpg'].includes(extension)) {
+         Swal.fire({
+            icon: 'error',
+            title: 'นามสกุลไฟล์ไม่ถูกต้อง',
+            html: 'รูปถ่ายต้องเป็นไฟล์สกุล <b>PNG หรือ JPEG</b> เท่านั้น',
+            confirmButtonColor: '#d63384'
+         });
+         input.value = ''; 
+         return;
+      }
+    } 
+    // กรณีที่ 2: ถ้าเป็นเอกสารอื่นๆ (เช่น ปพ.1 หรือ ใบรับรอง)
+    else {
+      if (!['pdf', 'png', 'jpeg', 'jpg'].includes(extension)) {
+         Swal.fire({
+            icon: 'error',
+            title: 'นามสกุลไฟล์ไม่ถูกต้อง',
+            html: 'เอกสารต้องเป็นไฟล์สกุล <b>PDF, PNG หรือ JPEG</b> เท่านั้น',
+            confirmButtonColor: '#d63384'
+         });
+         input.value = ''; 
+         return;
+      }
+    }
+
+    // -----------------------------------------------------------
+    // ส่วนเดิม: อ่านไฟล์และแปลงเป็น Base64
+    // -----------------------------------------------------------
+    var reader = new FileReader();
+
     reader.onload = function(e) {
-      // --- ส่วนเดิม: จัดการ Base64 ---
-      var pureBase64 = e.target.result.split(',')[1]; 
+      // จัดการ Base64
+      var pureBase64 = e.target.result.split(',')[1];
       var fileObj = {
         mimeType: file.type,
-        data: pureBase64 
+        data: pureBase64
       };
-      document.getElementById(id).value = JSON.stringify(fileObj);
+      
+      // เอาค่าใส่ใน Hidden Input
+      var targetInput = document.getElementById(id);
+      if (targetInput) {
+          targetInput.value = JSON.stringify(fileObj);
+      }
 
-      // --- ส่วนที่เพิ่มใหม่: แสดงตัวอย่างรูป (Preview) ---
-      // เช็คว่าถ้าเป็นช่องรูปถ่าย (photo64) ให้โชว์รูป
+      // แสดงตัวอย่างรูป (Preview) เฉพาะรูปถ่าย
       if (id === 'photo64') {
-          const previewContainer = document.getElementById('newPhotoPreview');
-          const previewImg = document.getElementById('imgPreview');
-          const oldPhoto = document.getElementById('oldPhoto');
+        const previewContainer = document.getElementById('newPhotoPreview');
+        const previewImg = document.getElementById('imgPreview');
+        const oldPhoto = document.getElementById('oldPhoto');
 
-          if (previewImg) {
-              previewImg.src = e.target.result; // ใส่รูปที่อ่านได้ลงไปใน tag img
-              if (previewContainer) previewContainer.style.display = 'block'; // สั่งให้แสดง div
-              if (oldPhoto) oldPhoto.style.display = 'none'; // ซ่อนรูปเดิม (ถ้ามี)
-          }
+        if (previewImg) {
+          previewImg.src = e.target.result; // ใส่รูปที่อ่านได้ลงไปใน tag img
+          if (previewContainer) previewContainer.style.display = 'block'; // สั่งให้แสดง div
+          if (oldPhoto) oldPhoto.style.display = 'none'; // ซ่อนรูปเดิม (ถ้ามี)
+        }
       }
     };
 
@@ -2416,8 +2539,28 @@ function initParentAddr() {
             console.warn("ไม่พบ Element ID: " + p + "_addr_prov");
         }
     });
+    initOldSchoolProv();
 }
+// ฟังก์ชันสำหรับโหลดรายชื่อจังหวัดลงในช่อง "โรงเรียนเดิม"
+function initOldSchoolProv() {
+  const select = document.getElementById('oldSchoolProvince');
+  // ตรวจสอบว่ามีตัวเลือกและฐานข้อมูลพร้อมหรือไม่
+  if (!select || !addrDB || addrDB.length === 0) return;
 
+  // ล้างตัวเลือกเดิม (ถ้ามี)
+  select.innerHTML = '<option value="">เลือกจังหวัด</option>';
+
+  // ดึงรายชื่อจังหวัด (เหมือนกับที่อยู่ปัจจุบัน)
+  const provs = [...new Set(addrDB.map(x => x[0]))].sort();
+
+  // สร้างตัวเลือกใน Dropdown
+  provs.forEach(p => {
+    let opt = document.createElement('option');
+    opt.value = p;
+    opt.innerHTML = p;
+    select.appendChild(opt);
+  });
+}
 // 2. เมื่อเลือกจังหวัด -> โหลดอำเภอ
 function chProvP(p) {
     const prov = document.getElementById(p + '_addr_prov').value;
