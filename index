@@ -796,7 +796,7 @@
            </div>
            <div class="modal-body p-4" id="mBody"></div>
            <div class="modal-footer bg-light">
-               <button class="btn btn-outline-dark me-auto" onclick="window.print()"><i class="bi bi-printer"></i> พิมพ์</button>
+               
                <div class="d-flex gap-2">
                    <button class="btn btn-warning" onclick="upSt('ให้ปรับปรุงข้อมูล')">แจ้งแก้ไข</button>
                    <button class="btn btn-danger" onclick="upSt('ไม่ผ่านการคัดเลือก')">ปฏิเสธ</button>
@@ -1248,266 +1248,325 @@ function validateThaiID(id) {
         }
     }).getAddressData();
 }
-  function fillForm(d) {
+
+
+function fillForm(d) {
     const el = (id) => document.getElementById(id);
 
     // ============================================
-    // 1. ข้อมูลส่วนตัวและระดับชั้น (Force Select)
+    // 1. วิเคราะห์ข้อมูล (Level, Plan, Type)
     // ============================================
-    el('editIdCard').value = d[13];
+    let rawType = String(d[2] || "").trim(); 
+    let targetPlan = String(d[6] || "").trim(); 
     let safeLevel = String(d[5] || "").trim();
-    el('level').value = safeLevel; 
+    
+    // ตั้งค่าเริ่มต้น
+    let applyType = 'general'; 
 
-    if(typeof loadPlans === 'function') {
-        loadPlans(d[6]); 
+    // เช็ค Keyword เพื่อเปลี่ยนเป็น special
+    const specialKeywords = ['SMTE', 'SME', 'Gifted', 'พิเศษ', 'AI', 'Coding', 'EP', 'IEP', 'MOU', 'เตรียมทหาร'];
+    if (specialKeywords.some(k => targetPlan.includes(k))) {
+        applyType = 'special';
+    } else if (rawType === 'special' || rawType.includes('พิเศษ')) {
+        applyType = 'special';
+    }
+
+    // ============================================
+    // 2. [จุดสำคัญ] ตั้งค่าประเภท (Apply Type) **ก่อน** ระดับชั้น
+    // ============================================
+    // เพื่อให้เมื่อระดับชั้นเปลี่ยน ระบบจะเห็นค่า Apply Type ที่ถูกต้องทันที
+    const typeRadio = document.querySelector(`input[name="applyType"][value="${applyType}"]`);
+    if(typeRadio) {
+        typeRadio.checked = true;
+        // กระตุ้นการเปลี่ยนค่า (เผื่อมีฟังก์ชันซ่อน/แสดงปุ่ม)
+        try { typeRadio.dispatchEvent(new Event('change')); } catch(e){} 
+    } else if(el('applyType')) {
+        el('applyType').value = applyType;
+        try { el('applyType').dispatchEvent(new Event('change')); } catch(e){} 
+    }
+    
+    // เรียกฟังก์ชันจัดการเมนู (ถ้ามี)
+    if(typeof toggleApplyType === 'function') toggleApplyType(applyType);
+
+
+    // ============================================
+    // 3. ตั้งค่าระดับชั้น (Level) **ทีหลัง**
+    // ============================================
+    if(el('level')) {
+        el('level').value = safeLevel;
+        // กระตุ้นการเปลี่ยนระดับชั้น -> ซึ่งจะไปเรียก loadPlans()
+        // และ loadPlans() จะไปอ่านค่า Apply Type ที่เราเพิ่งตั้งเมื่อกี้ -> ได้ค่าที่ถูก!
         try { el('level').dispatchEvent(new Event('change')); } catch(e){}
     }
 
-    let planRetry = 0;
-    const targetPlan = String(d[6] || "").trim();
-    const planInterval = setInterval(() => {
+    // ============================================
+    // 4. ระบบ Enforcer (ตัวคุมกันพลาด)
+    // ============================================
+    // เพื่อความชัวร์ 100% เราจะสั่งโหลดซ้ำและยัดค่าเดิมใส่เข้าไป
+    setTimeout(() => {
+        // 4.1 สั่งโหลดแผนการเรียนแบบเจาะจง (ทับอีกรอบ)
+        if(typeof loadPlans === 'function') {
+            loadPlans(safeLevel, applyType);
+        }
+
+        // 4.2 วนลูปรอเลือกค่าเดิม (Target Plan)
         const planSelect = el('plan');
-        if (planSelect && planSelect.options.length > 0) {
-            planSelect.value = targetPlan;
-            if (planSelect.value === targetPlan) {
-                clearInterval(planInterval);
-            } else if (planRetry > 20) {
-                let opt = document.createElement('option');
-                opt.value = targetPlan;
-                opt.innerHTML = targetPlan + " (ข้อมูลเดิม)";
-                opt.selected = true;
-                planSelect.appendChild(opt);
-                clearInterval(planInterval);
-            }
-        }
-        planRetry++;
-        if (planRetry > 30) clearInterval(planInterval);
-    }, 100);
+        if(planSelect) {
+            let planRetry = 0;
+            const planInterval = setInterval(() => {
+                // พยายามเลือกค่า
+                if (planSelect.value !== targetPlan) {
+                     planSelect.value = targetPlan;
+                }
+                
+                // เช็คว่าเลือกติดไหม
+                if (planSelect.value === targetPlan) { 
+                    clearInterval(planInterval); 
+                } 
+                // ถ้าวนหา 2 วินาทีแล้วยังไม่เจอ (แปลว่าแผนเดิมอาจจะไม่มีในลิสต์)
+                else if (planRetry > 20) {
+                    // เช็คว่ามีตัวเลือกนี้ในลิสต์ไหม
+                    let hasOption = false;
+                    for(let i=0; i<planSelect.options.length; i++){
+                        if(planSelect.options[i].value === targetPlan) hasOption = true;
+                    }
 
-    // --- 2. ข้อมูลส่วนตัวนักเรียน ---
-    el('prefix').value = d[7]; 
+                    // ถ้าไม่มี ให้สร้างตัวเลือก "ข้อมูลเดิม" ยัดเข้าไป
+                    if(!hasOption) {
+                        let opt = document.createElement('option');
+                        opt.value = targetPlan;
+                        opt.innerHTML = targetPlan + " (ข้อมูลเดิม)";
+                        opt.selected = true;
+                        planSelect.appendChild(opt);
+                    }
+                    planSelect.value = targetPlan; // เลือกซ้ำ
+                    clearInterval(planInterval);
+                }
+                planRetry++;
+                if(planRetry > 40) clearInterval(planInterval); // หยุดเมื่อครบ 4 วิ
+            }, 100);
+        }
+    }, 300); // รอ 0.3 วินาทีให้ระบบเดิมทำงานเสร็จก่อนค่อยเข้าแทรกแซง
+
+
+    // ============================================
+    // 5. ข้อมูลส่วนตัว (เหมือนเดิม)
+    // ============================================
+    el('editIdCard').value = d[17]; 
+    el('prefix').value    = d[7]; 
     el('firstname').value = d[8]; 
-    el('lastname').value = d[9]; 
-    el('dob').value = d[10].replace(/'/g, '');
-    el('nationality').value = d[11]; 
-    el('religion').value = d[12];
+    el('lastname').value  = d[9]; 
+
+    if(el('firstnameEn'))       el('firstnameEn').value       = d[10] || '';
+    if(el('lastnameEn'))        el('lastnameEn').value        = d[11] || '';
+    if(el('oldSchoolName'))     el('oldSchoolName').value     = d[12] || '';
+    if(el('oldSchoolProvince')) el('oldSchoolProvince').value = d[13] || '';
+
+    el('dob').value         = d[14].replace(/'/g, '');
+    el('nationality').value = d[15];          
+    el('religion').value    = d[16];              
     
-    // ตรวจสอบว่ามีฟังก์ชัน setDig ไหม ถ้าไม่มีให้ข้ามไป
     if(typeof setDig === 'function'){
-      setDig('idCard-container', d[13].replace(/'/g, ''));
-      setDig('phone-container', d[14].replace(/'/g, ''));
+      setDig('idCard-container', String(d[17]).replace(/'/g, ''));
+      setDig('phone-container',  String(d[18]).replace(/'/g, ''));
     } else {
-      el('idCard').value = d[13].replace(/'/g, '');
-      el('phone').value = d[14].replace(/'/g, '');
+      el('idCard').value = String(d[17]).replace(/'/g, '');
+      el('phone').value  = String(d[18]).replace(/'/g, '');
     }
-    
-    el('famStatus').value = d[16];
+    el('famStatus').value = d[20];
 
-    // --- 3. ข้อมูลครอบครัว (บิดา f, มารดา m, ผู้ปกครอง g) ---
-    // ปรับปรุงการใส่ที่อยู่: เนื่องจากข้อมูลเดิมรวมเป็นบรรทัดเดียว 
-    // เมื่อดึงมาแก้ไข จะนำข้อมูลทั้งหมดไปวางในช่อง "บ้านเลขที่" (addr_no) เพื่อป้องกัน Error
-    
-    const fillParent = (p, startIdx) => {
-    // 1. เติมข้อมูลพื้นฐาน
-    el(p+'_prefix').value = d[startIdx];
-    el(p+'_name').value   = d[startIdx+1];
-    el(p+'_lname').value  = d[startIdx+2];
-    el(p+'_job').value    = d[startIdx+3];
-    if(el(p+'_age')) el(p+'_age').value = d[startIdx+4] || '';
-    el(p+'_phone').value = String(d[startIdx+5]).replace(/'/g, '');
-
-    const fullAddr = String(d[startIdx+6] || "");
-    
-    // 2. ตรวจสอบสถานะ "ที่อยู่เดียวกับนักเรียน"
-    if(fullAddr.includes('เดียวกับ')) {
-        el(p+'_same').checked = true;
-        toggleAddr(p);
-    } else {
-        el(p+'_same').checked = false;
-        toggleAddr(p);
-        
-        try {
-            // --- ส่วนการแยกที่อยู่ (Logic เดียวกับนักเรียน) ---
-            
-            // ดึงจังหวัด: หาคำหลัง จ. หรือ จังหวัด
-            const provMatch = fullAddr.match(/จ\.?\s?([ก-๙]+)/) || fullAddr.match(/จังหวัด\s?([ก-๙]+)/);
-            if (provMatch && el(p+'_addr_prov')) {
-                const provName = provMatch[1].trim();
-                el(p+'_addr_prov').value = provName;
-                
-                // กระตุ้นให้โหลด อำเภอ
-                chProvP(p); 
-
-                setTimeout(() => {
-                    // ดึงอำเภอ: หาคำหลัง อ. หรือ อำเภอ
-                    const distMatch = fullAddr.match(/อ\.?\s?([ก-๙]+)/) || fullAddr.match(/อำเภอ\s?([ก-๙]+)/);
-                    if (distMatch && el(p+'_addr_dist')) {
-                        const distName = distMatch[1].trim();
-                        el(p+'_addr_dist').value = distName;
-                        
-                        // กระตุ้นให้โหลด ตำบล
-                        chDistP(p);
-
-                        setTimeout(() => {
-                            // ดึงตำบล: หาคำหลัง ต. หรือ ตำบล
-                            const subMatch = fullAddr.match(/ต\.?\s?([ก-๙]+)/) || fullAddr.match(/ตำบล\s?([ก-๙]+)/);
-                            if (subMatch && el(p+'_addr_sub')) {
-                                el(p+'_addr_sub').value = subMatch[1].trim();
-                                // กระตุ้นให้โหลด รหัสไปรษณีย์
-                                chSubP(p);
-                            }
-                            
-                            // ดึงเลขที่บ้าน (คำแรกสุดของประโยค)
-                            const addrNo = fullAddr.split(' ')[0];
-                            el(p+'_addr_no').value = addrNo;
-                            
-                            // ดึงหมู่ (หาคำว่า หมู่ หรือ ม.)
-                            const mooMatch = fullAddr.match(/หมู่\s?(\d+)/) || fullAddr.match(/ม\.(\d+)/);
-                            if(mooMatch) el(p+'_addr_moo').value = mooMatch[1];
-                            
-                            // ดึงถนน/ซอย (พยายามหาคำระหว่าง หมู่ กับ ตำบล)
-                            const roadMatch = fullAddr.match(/(?:ถนน|ซอย|ถ\.|ซ\.)\s?([ก-๙0-9\s]+)(?=ต\.|ตำบล)/);
-                            if(roadMatch) el(p+'_addr_road').value = roadMatch[1].trim();
-                            
-                        }, 400);
-                    }
-                }, 400);
-            } else {
-                // ถ้าแกะไม่ได้เลย ให้ใส่ช่องเลขที่บ้านไว้กันข้อมูลหาย
-                el(p+'_addr_no').value = fullAddr;
-            }
-        } catch (e) {
-            console.error("Error parsing parent address:", e);
-            el(p+'_addr_no').value = fullAddr;
+    // ============================================
+    // 6. ที่อยู่ (Address Parsing)
+    // ============================================
+    const selectDropdown = (elementId, keyword, callback) => {
+        const targetEl = el(elementId) || document.querySelector(`[name="${elementId}"]`);
+        if (!targetEl || !keyword || keyword === '-' || keyword === 'undefined') {
+            if(callback) callback(); return;
         }
-    }
-}
-
-    // เรียกฟังก์ชันเติมข้อมูลตามตำแหน่ง Column ในชีต
-    fillParent('f', 17); // บิดา เริ่ม col 17
-    fillParent('m', 24); // มารดา เริ่ม col 24 (ถ้าแทรกคอลัมน์อายุแล้ว ลำดับอาจเลื่อน ให้เช็คเลข index อีกที)
-    
-    // --- ส่วนของผู้ปกครอง (Guardian) ---
-    el('g_prefix').value = d[31];
-    el('g_name').value = d[32];
-    el('g_lname').value = d[33];
-    el('g_rel').value = d[34];
-    el('g_job').value = d[35];
-    if(el('g_age')) el('g_age').value = d[36] || ''; 
-    el('g_phone').value = String(d[37]).replace(/'/g, '');
-    
-    const gAddr = String(d[38] || "");
-    if(gAddr.includes('เดียวกับ')) {
-        el('g_same').checked = true;
-        toggleAddr('g');
-    } else {
-        el('g_same').checked = false;
-        toggleAddr('g');
-        
-        // --- ส่วนที่เพิ่มเข้ามาเพื่อแยกที่อยู่ลงช่อง ---
-        try {
-            // 1. ค้นหาจังหวัด
-            const provMatch = gAddr.match(/จ\.?\s?([ก-๙]+)/) || gAddr.match(/จังหวัด\s?([ก-๙]+)/);
-            if (provMatch && el('g_addr_prov')) {
-                const provName = provMatch[1].trim();
-                el('g_addr_prov').value = provName;
-                
-                // สั่งโหลด อำเภอ
-                chProvP('g'); 
-
-                setTimeout(() => {
-                    // 2. ค้นหาอำเภอ
-                    const distMatch = gAddr.match(/อ\.?\s?([ก-๙]+)/) || gAddr.match(/อำเภอ\s?([ก-๙]+)/);
-                    if (distMatch && el('g_addr_dist')) {
-                        el('g_addr_dist').value = distMatch[1].trim();
-                        
-                        // สั่งโหลด ตำบล
-                        chDistP('g');
-
-                        setTimeout(() => {
-                            // 3. ค้นหาตำบล
-                            const subMatch = gAddr.match(/ต\.?\s?([ก-๙]+)/) || gAddr.match(/ตำบล\s?([ก-๙]+)/);
-                            if (subMatch && el('g_addr_sub')) {
-                                el('g_addr_sub').value = subMatch[1].trim();
-                                // โหลดรหัสไปรษณีย์
-                                chSubP('g');
-                            }
-                            
-                            // เติมข้อมูล บ้านเลขที่ หมู่ ถนน (จากข้อมูลก้อนแรก)
-                            const addrParts = gAddr.split(' ');
-                            el('g_addr_no').value = addrParts[0] || ''; 
-                            
-                            const mooMatch = gAddr.match(/หมู่\s?(\d+)/) || gAddr.match(/ม\.(\d+)/);
-                            if(mooMatch) el('g_addr_moo').value = mooMatch[1];
-                            
-                            const roadMatch = gAddr.match(/(?:ถนน|ซอย|ถ\.|ซ\.)\s?([ก-๙0-9\s]+)(?=ต\.|ตำบล)/);
-                            if(roadMatch) el('g_addr_road').value = roadMatch[1].trim();
-                            
-                        }, 400);
+        let retry = 0;
+        const interval = setInterval(() => {
+            let isSet = false;
+            targetEl.value = keyword;
+            if (targetEl.value == keyword) isSet = true;
+            if (!isSet && targetEl.options && targetEl.options.length > 0) {
+                for (let i = 0; i < targetEl.options.length; i++) {
+                    if (targetEl.options[i].text.trim() === keyword.trim()) {
+                        targetEl.selectedIndex = i; isSet = true; break;
                     }
-                }, 400);
-            } else {
-                // ถ้าแกะไม่ได้เลย ให้ใส่ช่องแรกไว้กันข้อมูลหาย
-                if(el('g_addr_no')) el('g_addr_no').value = gAddr;
+                }
             }
-        } catch (e) {
-            console.error("Error parsing guardian address:", e);
-            if(el('g_addr_no')) el('g_addr_no').value = gAddr;
+            if (isSet || retry > 50) {
+                clearInterval(interval);
+                try { targetEl.dispatchEvent(new Event('change')); } catch(e){}
+                setTimeout(() => { if (callback) callback(); }, 100);
+            }
+            retry++;
+        }, 100);
+    };
+
+    const parseAddress = (prefix, fullAddr) => {
+        fullAddr = String(fullAddr || "").trim();
+        if(!fullAddr || fullAddr === '-' || fullAddr === 'undefined') return;
+        if(fullAddr.includes('เดียวกับ')) {
+            if(el(prefix+'_same')) { el(prefix+'_same').checked = true; if(typeof toggleAddr === 'function') toggleAddr(prefix); } return;
+        }
+        if(el(prefix+'_same')) { el(prefix+'_same').checked = false; if(typeof toggleAddr === 'function') toggleAddr(prefix); }
+        if(el(prefix+'_addr_no')) el(prefix+'_addr_no').value = fullAddr;
+
+        try {
+            const mooMatch = fullAddr.match(/(?:หมู่ที่|หมู่|ม\.|(?:^|\s)ม)\s*(\d+)/);
+            if(mooMatch && el(prefix+'_addr_moo')) el(prefix+'_addr_moo').value = mooMatch[1];
+            const roadMatch = fullAddr.match(/(?:ถนน|ถ\.|ถ)\s?([ก-๙0-9\s\.]+?)(?=\s(?:ต\.|ตำบล|แขวง|อ\.|อำเภอ|เขต|$))/);
+            if(roadMatch && el(prefix+'_addr_road')) el(prefix+'_addr_road').value = roadMatch[1].trim();
+            const soiMatch = fullAddr.match(/(?:ซอย|ซ\.)\s?([ก-๙0-9\s\.]+?)(?=\s(?:ถ\.|ถนน|ต\.|ตำบล|แขวง|$))/);
+            if(soiMatch && el(prefix+'_addr_soi')) el(prefix+'_addr_soi').value = soiMatch[1].trim();
+            const provMatch = fullAddr.match(/(?:จังหวัด|จ\.|(?:^|\s)จ)\s*([ก-๙]+)/);
+            const provName = provMatch ? provMatch[1].trim() : '';
+            const distMatch = fullAddr.match(/(?:อำเภอ|อ\.|เขต|(?:^|\s)อ)\s*([ก-๙]+)/);
+            const distName = distMatch ? distMatch[1].trim() : '';
+            const subMatch = fullAddr.match(/(?:ตำบล|ต\.|แขวง|(?:^|\s)ต)\s*([ก-๙]+)/);
+            const subName = subMatch ? subMatch[1].trim() : '';
+
+            if (provName) {
+                selectDropdown(prefix+'_addr_prov', provName, () => {
+                    if(typeof window['chProvP'] === 'function') window['chProvP'](prefix);
+                    setTimeout(() => { 
+                        selectDropdown(prefix+'_addr_dist', distName, () => {
+                            if(typeof window['chDistP'] === 'function') window['chDistP'](prefix);
+                            setTimeout(() => {
+                                selectDropdown(prefix+'_addr_sub', subName, () => {
+                                    if(typeof window['chSubP'] === 'function') window['chSubP'](prefix);
+                                    const noMatch = fullAddr.split(' ')[0];
+                                    if(noMatch && !['จ.', 'อ.', 'ต.', 'ม.', 'หมู่'].some(x => noMatch.startsWith(x))) {
+                                        if(el(prefix+'_addr_no')) el(prefix+'_addr_no').value = noMatch;
+                                    }
+                                });
+                            }, 800);
+                        });
+                    }, 800);
+                });
+            }
+        } catch (e) { console.error("Addr Parse Error", e); }
+    };
+
+    if(el('f_prefix')) el('f_prefix').value = d[21];
+    if(el('f_name'))   el('f_name').value   = d[22];
+    if(el('f_lname'))  el('f_lname').value  = d[23];
+    if(el('f_job'))    el('f_job').value    = d[24];
+    if(el('f_age'))    el('f_age').value    = d[25];
+    if(el('f_phone'))  el('f_phone').value  = String(d[26]).replace(/'/g, '');
+    parseAddress('f', d[27]);
+
+    if(el('m_prefix')) el('m_prefix').value = d[28];
+    if(el('m_name'))   el('m_name').value   = d[29];
+    if(el('m_lname'))  el('m_lname').value  = d[30];
+    if(el('m_job'))    el('m_job').value    = d[31];
+    if(el('m_age'))    el('m_age').value    = d[32];
+    if(el('m_phone'))  el('m_phone').value  = String(d[33]).replace(/'/g, '');
+    parseAddress('m', d[34]);
+
+    if(el('g_prefix')) el('g_prefix').value = d[35];
+    if(el('g_name'))   el('g_name').value   = d[36];
+    if(el('g_lname'))  el('g_lname').value  = d[37];
+    if(el('g_rel'))    el('g_rel').value    = d[38]; 
+    if(el('g_job'))    el('g_job').value    = d[39];
+    if(el('g_age'))    el('g_age').value    = d[40];
+    if(el('g_phone'))  el('g_phone').value  = String(d[41]).replace(/'/g, '');
+    parseAddress('g', d[42]); 
+
+    if(d[43] && d[43]!='-' && d[43].includes('http')) {
+         if(el('oldPhoto')) {
+             el('oldPhoto').innerHTML=`<div class="alert alert-info py-1"><small>รูปเดิม: <a href="${d[43]}" target="_blank">ดูรูป</a></small></div><img src="${getDirectImg(d[43])}" class="img-thumbnail mt-1" style="max-height:100px;">`;
+             show('oldPhoto'); el('photoFile').removeAttribute('required');
+         }
+    }
+    if(d[44] && d[44]!='-' && d[44].includes('http')) {
+         if(el('oldTs')) {
+             el('oldTs').innerHTML=`<div class="alert alert-info py-1"><small>ปพ.1 เดิม: <a href="${d[44]}" target="_blank">เปิดดู</a></small></div>`;
+             show('oldTs');
+         }
+    }
+    if(d[45] && d[45]!='-' && d[45].includes('http')) {
+         if(el('oldConduct')) {
+            el('oldConduct').innerHTML=`<div class="alert alert-warning py-1"><small>ใบรับรองความประพฤติเดิม: <a href="${d[45]}" target="_blank">เปิดดู</a></small></div>`;
+            show('oldConduct');
+         }
+    }
+
+    let jsonStr = d[46];
+    if (!jsonStr || !jsonStr.includes('{')) {
+        for(let i=d.length-1; i>=40; i--) {
+            if(d[i] && typeof d[i]==='string' && d[i].trim().startsWith('{')) {
+                jsonStr = d[i]; break;
+            }
         }
     }
 
-    // --- รูปและเอกสาร ---
-    if(d[d.length-4] && d[d.length-4]!='-') {
-        el('oldPhoto').innerHTML=`<div class="alert alert-info py-1"><small>มีรูปเดิม: <a href="${d[d.length-4]}" target="_blank">ดูรูป</a></small></div><img src="${getDirectImg(d[d.length-4])}" class="img-thumbnail mt-1" style="max-height:100px;">`;
-        show('oldPhoto'); el('photoFile').removeAttribute('required');
-    }
-    if(d[d.length-3] && d[d.length-3]!='-') { 
-        el('oldTs').innerHTML=`<div class="alert alert-info py-1"><small>เอกสารเดิม: <a href="${d[d.length-3]}" target="_blank">เปิดดู</a></small></div>`; 
-        show('oldTs'); 
-    }
-
-    // --- 4. ที่อยู่นักเรียน (JSON) ---
-    let jsonAddr = d[d.length - 1]; 
-    if (jsonAddr && typeof jsonAddr === 'string' && jsonAddr.startsWith('{')) {
+    if (jsonStr && jsonStr.includes('{')) {
         try {
-            let addr = JSON.parse(jsonAddr);
-            el('addrNo').value = addr.no || '';
-            el('addrMoo').value = addr.moo || '';
-            el('addrSoi').value = addr.soi || '';
-            el('addrRoad').value = addr.road || '';
-
-            el('province').value = addr.prov;
-            el('province').dispatchEvent(new Event('change'));
-
-            setTimeout(() => {
-                el('district').value = addr.dist;
-                el('district').dispatchEvent(new Event('change'));
-
-                setTimeout(() => {
-                    el('subdistrict').value = addr.sub;
-                    if(addr.zip) el('zipcode').value = addr.zip;
-                    loading(0); // ปิดหน้าประมวลผล
-                }, 500);
-            }, 500);
-
-        } catch (e) { console.error("JSON Error", e); loading(0); }
-    } else {
-        loading(0);
-    }
+            let addr = JSON.parse(jsonStr);
+            if(el('addrNo')) el('addrNo').value = addr.no || '';
+            if(el('addrMoo')) el('addrMoo').value = addr.moo || '';
+            if(el('addrSoi')) el('addrSoi').value = addr.soi || '';
+            if(el('addrRoad')) el('addrRoad').value = addr.road || '';
+            if(addr.prov) {
+                selectDropdown('province', addr.prov, () => {
+                    el('province').dispatchEvent(new Event('change'));
+                    setTimeout(() => {
+                        selectDropdown('district', addr.dist, () => {
+                            el('district').dispatchEvent(new Event('change'));
+                            setTimeout(() => {
+                                selectDropdown('subdistrict', addr.sub, () => {
+                                     if(addr.zip && el('zipcode')) el('zipcode').value = addr.zip;
+                                     loading(0);
+                                });
+                            }, 500);
+                        });
+                    }, 500);
+                });
+            } else { loading(0); }
+        } catch (e) { console.error('JSON Error', e); loading(0); }
+    } else { loading(0); }
 }
-   
+ function loadPlans(forceLevel, forceType) {
+    const el = (id) => document.getElementById(id);
+    
+    // 1. ระดับชั้น: เช็คว่าค่าที่ส่งมาเป็น String จริงไหม (กันค่า Event Object)
+    let level = (typeof forceLevel === 'string') ? forceLevel : el('level').value;
 
-
-
-    function loadPlans(sv) {
-       const l = el('level').value; const t = el('applyType').value;
-       if(!l) return;
-       google.script.run.withSuccessHandler(p => {
-          const s = el('plan'); s.innerHTML='<option value="">เลือก</option>';
-          p.forEach(x => s.add(new Option(x,x)));
-          if(sv) s.value = sv;
-       }).getStudyPlans(l, t);
+    // 2. ประเภท: เช็คว่าค่าที่ส่งมาเป็น String จริงไหม
+    let type = "";
+    if (typeof forceType === 'string') {
+        type = forceType;
+    } else {
+        // ถ้าไม่ส่งมา ให้อ่านจากหน้าจอ (สำคัญมาก)
+        const radio = document.querySelector('input[name="applyType"]:checked');
+        if (radio) type = radio.value;
+        else if (el('applyType')) type = el('applyType').value;
     }
+
+    // ถ้าไม่มีข้อมูล ไม่ต้องโหลด
+    if (!level) return;
+
+    // console.log("Loading plans for:", level, type);
+
+    google.script.run.withSuccessHandler(function(plans) {
+        const s = el('plan');
+        const oldVal = s.value; // จำค่าเดิมที่เลือกไว้ (ถ้ามี)
+        
+        s.innerHTML = '<option value="">- เลือกแผนการเรียน -</option>';
+        if (plans && plans.length > 0) {
+            plans.forEach(function(x) {
+                s.add(new Option(x, x));
+            });
+        }
+
+        // พยายามเลือกค่าเดิมกลับคืนมา (ถ้ามีในลิสต์ใหม่)
+        if (oldVal && Array.from(s.options).some(o => o.value === oldVal)) {
+            s.value = oldVal;
+        }
+    }).getStudyPlans(level, type);
+}
     function popProv() { const p = [...new Set(addrDB.map(r=>r[0]))].sort(); const s = el('province'); s.innerHTML='<option value="">เลือก</option>'; p.forEach(x=>s.add(new Option(x,x))); }
     function chProv() { const pv=el('province').value; const d=el('district'); const sd=el('subdistrict'); el('zipcode').value=''; d.innerHTML='<option value="">เลือก</option>'; d.disabled=!pv; sd.innerHTML='<option value="">เลือก</option>'; sd.disabled=true; if(pv) [...new Set(addrDB.filter(r=>r[0]===pv).map(r=>r[1]))].sort().forEach(x=>d.add(new Option(x,x))); }
     function chDist() { const pv=el('province').value; const dt=el('district').value; const sd=el('subdistrict'); el('zipcode').value=''; sd.innerHTML='<option value="">เลือก</option>'; sd.disabled=!dt; if(dt) [...new Set(addrDB.filter(r=>r[0]===pv && r[1]===dt).map(r=>r[2]))].sort().forEach(x=>sd.add(new Option(x,x))); }
@@ -2388,7 +2447,7 @@ function filterTbl() {
             <tr><th>แผนการเรียน:</th><td>${s.plan}</td></tr>
             <tr><th>สถานะ:</th><td><span class="badge bg-secondary">${s.status}</span></td></tr>
             <tr class="table-light"><th colspan="2" class="pt-2 text-muted">ข้อมูลติดต่อผู้ปกครอง</th></tr>
-            <tr><td colspan="2">${s.fullData[31]}${s.fullData[32]} ${s.fullData[33]} (${s.fullData[34]})<br>โทร: <a href="tel:${s.fullData[36]}">${s.fullData[36]}</a></td></tr>
+            <tr><td colspan="2">${s.fullData[35]}${s.fullData[36]} ${s.fullData[37]} (${s.fullData[42]})<br>โทร: <a href="tel:${s.fullData[41]}">${s.fullData[41]}</a></td></tr>
           </table>
           ${s.reason ? `<div class="alert alert-danger py-1"><small><b>หมายเหตุ:</b> ${s.reason}</small></div>` : ''}
        </div>
