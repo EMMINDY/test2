@@ -569,6 +569,12 @@
             <input type="hidden" id="ts64">
             <div id="oldTs" class="hidden mt-2"></div>
         </div>
+        <div id="ts-box2" class="mb-4">
+            <label class="form-label">ใบรับรองผลการเรียน (ปพ.1) ด้านหลัง/เพิ่มเติม</label>
+            <input type="file" id="tsFile2" class="form-control" accept="image/*,application/pdf" onchange="readF(this,'ts64_2')">
+            <input type="hidden" id="ts64_2">
+         <div id="oldTs2" class="hidden mt-2"></div>
+        </div>
         <div id="conduct-box" class="mb-4">
             <label class="form-label">ใบรับรองความประพฤติ <span class="req-star">*</span></label>
             <input type="file" id="conductFile" class="form-control" accept="image/*,application/pdf" onchange="readF(this,'conduct64')">
@@ -1486,14 +1492,22 @@ function fillForm(d) {
              show('oldTs');
          }
     }
-    if(d[45] && d[45]!='-' && d[45].includes('http')) {
+
+    if(d[45] && d[45]!='-' && d[46].includes('http')) {
+         if(el('oldTs2')) {
+             el('oldTs2').innerHTML=`<div class="alert alert-info py-1"><small>ปพ.1 (หลัง) เดิม: <a href="${d[46]}" target="_blank">เปิดดู</a></small></div>`;
+             el('oldTs2').classList.remove('hidden');
+         }
+    }
+
+    if(d[46] && d[46]!='-' && d[45].includes('http')) {
          if(el('oldConduct')) {
             el('oldConduct').innerHTML=`<div class="alert alert-warning py-1"><small>ใบรับรองความประพฤติเดิม: <a href="${d[45]}" target="_blank">เปิดดู</a></small></div>`;
             show('oldConduct');
          }
     }
 
-    let jsonStr = d[46];
+    let jsonStr = d[47];
     if (!jsonStr || !jsonStr.includes('{')) {
         for(let i=d.length-1; i>=40; i--) {
             if(d[i] && typeof d[i]==='string' && d[i].trim().startsWith('{')) {
@@ -1867,6 +1881,7 @@ function fillForm(d) {
                 guardian: getP('g'),
                 photoFile: JSON.parse(el('photo64').value || '{}'),
                 transcriptFile: el('ts64').value ? JSON.parse(el('ts64').value) : null,
+                transcriptFile2: el('ts64_2').value ? JSON.parse(el('ts64_2').value) : null,
                 conductFile: el('conduct64').value ? JSON.parse(el('conduct64').value) : null
             };
 
@@ -2229,6 +2244,30 @@ function viewS(rowIndex) {
         }
     }
 
+    // --- [เพิ่มใหม่] จัดการปุ่มที่ 2 (ปพ.1 หลัง) ---
+    const btnDoc2 = document.getElementById('vTranscript2');
+    if(btnDoc2) {
+        // เช็คว่ามีข้อมูล transcript2 หรือไม่ (ต้องแก้ข้อ 2 ใน code.gs ก่อนนะ)
+        if (s.transcript2 && s.transcript2.length > 5) {
+            btnDoc2.href = s.transcript2;
+            btnDoc2.classList.remove('disabled', 'btn-secondary', 'd-none');
+            btnDoc2.classList.add('btn-outline-primary'); // ใช้สี outline ให้ดูแตกต่างนิดหน่อย
+            btnDoc2.innerHTML = '<i class="bi bi-file-earmark-pdf"></i> เปิดดูใบ ปพ.1 (หลัง/เพิ่มเติม)';
+            btnDoc2.style.display = 'block'; // แสดงปุ่ม
+        } else {
+            // กรณีไม่มีไฟล์ที่ 2 ให้ซ่อนปุ่มไปเลย (จะได้ไม่รก)
+            btnDoc2.style.display = 'none';
+            
+            // หรือถ้าอยากให้โชว์แต่กดไม่ได้ ให้ใช้แบบนี้แทน:
+            /*
+            btnDoc2.href = '#';
+            btnDoc2.classList.add('disabled', 'btn-secondary');
+            btnDoc2.classList.remove('btn-outline-primary');
+            btnDoc2.innerHTML = 'ไม่มี ปพ.1 (หลัง)';
+            btnDoc2.style.display = 'block';
+            */
+        }
+    }
     // --- ส่วนที่เพิ่มใหม่: ใบรับรองความประพฤติ ---
     const btnConduct = document.getElementById('vConduct'); // อ้างอิง ID ปุ่มใหม่
     if(btnConduct) {
@@ -2418,17 +2457,23 @@ function filterTbl() {
     function viewS(i) {
     curIdx = i;
     const s = allSt.find(x => x.rowIndex === i);
-    let photoSrc = getDirectImg(s.photo);
+    let photoSrc = getDirectImg(s.photo); // ตรวจสอบ function นี้ว่ามีอยู่จริงไหม ถ้าไม่มีให้ใช้ s.photo ตรงๆ
 
     // 1. ปุ่มใบรับรองความประพฤติ
     let btnConduct = (s.conduct && s.conduct.length > 5) 
         ? `<a href="javascript:void(0)" onclick="previewDoc('${s.conduct}')" class="btn btn-sm btn-outline-info mt-1 w-100"><i class="bi bi-file-person"></i> ดูใบรับรองความประพฤติ</a>`
         : `<button class="btn btn-sm btn-light mt-1 w-100 text-muted" disabled>ไม่มีใบรับรองความประพฤติ</button>`;
 
-    // 2. ปุ่มพิมพ์บัตรประจำตัวสอบ (สร้างรอไว้ก่อน)
+    // [เพิ่มใหม่] 1.1 ปุ่ม ปพ.1 ใบที่ 2 (ด้านหลัง)
+    // เช็คว่ามีข้อมูล transcript2 ไหม (ต้องแน่ใจว่าแก้ code.gs ให้ส่ง transcript2 มาแล้วนะ)
+    let btnTranscript2 = (s.transcript2 && s.transcript2.length > 5)
+        ? `<a href="javascript:void(0)" onclick="previewDoc('${s.transcript2}')" class="btn btn-sm btn-outline-primary mt-1 w-100"><i class="bi bi-file-earmark-pdf"></i> ดูใบ ปพ.1 (ด้านหลัง/เพิ่มเติม)</a>`
+        : ``; // ถ้าไม่มีก็ไม่ต้องแสดงอะไร
+
+    // 2. ปุ่มพิมพ์บัตรประจำตัวสอบ
     let btnPrint = `<button onclick="printCard(${s.rowIndex})" class="btn btn-sm btn-success mt-2 w-100"><i class="bi bi-printer-fill"></i> พิมพ์บัตรประจำตัวสอบ</button>`;
 
-    // 3. สร้าง HTML รวม (เอามารวมกันในตัวแปร h ตัวเดียว)
+    // 3. สร้าง HTML รวม
     let h = `<div class="row">
        <div class="col-md-4 text-center mb-3">
           <div class="card shadow-sm p-2">
@@ -2436,9 +2481,13 @@ function filterTbl() {
              <div class="mt-2 fw-bold text-primary">${s.appId}</div>
           </div>
           
-          <a href="javascript:void(0)" onclick="previewDoc('${s.transcript}')" class="btn btn-sm btn-outline-dark mt-2 w-100"><i class="bi bi-file-earmark-text"></i> ดูใบ ปพ.1</a>
+          <a href="javascript:void(0)" onclick="previewDoc('${s.transcript}')" class="btn btn-sm btn-outline-dark mt-2 w-100"><i class="bi bi-file-earmark-text"></i> ดูใบ ปพ.1 </a>
+          
+          ${btnTranscript2}
+          
           ${btnConduct}
-          ${btnPrint} </div>
+          ${btnPrint} 
+       </div>
        <div class="col-md-8">
           <h5 class="fw-bold text-primary border-bottom pb-2">${s.name}</h5>
           <table class="table table-sm table-borderless">
@@ -2455,7 +2504,10 @@ function filterTbl() {
 
     // 4. แสดงผล
     el('mBody').innerHTML = h;
-    if (!myModal) { myModal = new bootstrap.Modal(el('sModal'), { focus: false }); }
+    if (typeof myModal === 'undefined' || !myModal) { 
+        // สร้าง Modal ถ้ายังไม่มี (แก้ logic เล็กน้อยให้ปลอดภัยขึ้น)
+        myModal = new bootstrap.Modal(document.getElementById('sModal'), { focus: false }); 
+    }
     myModal.show();
 }
     function upSt(s) {
@@ -3164,6 +3216,11 @@ document.querySelectorAll('.text-eng').forEach(function(el) {
                              <a id="vTranscript" href="#" target="_blank" class="btn btn-primary">
                                 <i class="bi bi-file-earmark-pdf"></i> เปิดดูใบ ปพ.1
                              </a>
+
+                             <a id="vTranscript2" href="#" target="_blank" class="btn btn-outline-primary" style="display:none;">
+                             <i class="bi bi-file-earmark-pdf"></i> เปิดดูใบ ปพ.1 (ด้านหลัง/เพิ่มเติม)
+                             </a>
+
                              <a id="vConduct" href="#" target="_blank" class="btn btn-info text-white">
                                 <i class="bi bi-file-person"></i> เปิดดูใบรับรองความประพฤติ
                              </a>
