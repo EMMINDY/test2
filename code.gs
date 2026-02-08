@@ -88,7 +88,7 @@ function submitApplication(fd) {
   }
   
   const lock = LockService.getScriptLock();
-  // แก้ไข logic การ Lock เล็กน้อย (รอ lock ได้ ไม่ต้อง throw ทันทีถ้าว่าง)
+  // แก้ไข logic การ Lock (รอ lock ได้สูงสุด 10 วินาที)
   if(!lock.tryLock(10000)) throw new Error("ระบบกำลังประมวลผล กรุณารอ 10 วินาที");
   
   try {
@@ -108,17 +108,19 @@ function submitApplication(fd) {
 
     const allData = sheet.getDataRange().getValues();
 
-    // --- [จุดที่ 1] เช็คเลขบัตรซ้ำ (Index 17 / Column R) ---
+    // --- [จุดที่ 1] เช็คเลขบัตรซ้ำ (ใช้ Index 17 ตาม Sheet ของคุณ) ---
     if (!fd.isEditMode) {
+      // ตรวจสอบ Column R (Index 17)
       const isDuplicate = allData.some(row => String(row[17]).replace(/'/g, '').trim() === idCardClean);
       if (isDuplicate) throw new Error("เลขบัตรประชาชนนี้ลงทะเบียนแล้ว");
     }
 
-    // --- [จุดที่ 2] ค้นหาแถวเดิมเพื่อแก้ไข (Index 17 / Column R) ---
+    // --- [จุดที่ 2] ค้นหาแถวเดิมเพื่อแก้ไข ---
     if(fd.isEditMode && fd.editIdCard) {
        for(let i=allData.length-1; i>=1; i--) {
+         // ตรวจสอบ Column R (Index 17)
          if(String(allData[i][17]).replace(/'/g,'') === String(fd.editIdCard)) {
-            // อนุญาตให้แก้สถานะ 'ให้ปรับปรุงข้อมูล' หรือ 'อนุมัติ' (ตาม logic เดิมของคุณ)
+            // อนุญาตให้แก้ถ้ายั่งไม่อนุมัติ หรือสถานะให้ปรับปรุง
             if(allData[i][3] !== 'ให้ปรับปรุงข้อมูล' && allData[i][3] !== 'อนุมัติ' && allData[i][3] !== 'รอตรวจสอบ') 
                throw new Error("สถานะ '" + allData[i][3] + "' ไม่อนุญาตให้แก้ไข");
             rowIndex = i+1; 
@@ -130,17 +132,22 @@ function submitApplication(fd) {
     }
 
     // --- [จุดที่ 3] จัดการไฟล์แนบ (URL) ---
-    // ปรับ Index ให้ตรงกับ Sheet ใหม่ที่มีคอลัมน์แทรก
-    // รูปถ่าย: Index 44 (Column AS)
-    // ปพ.1: Index 45 (Column AT)
-    // ความประพฤติ: Index 46 (Column AU)
+    // อ้างอิงลำดับ Column: 
+    // รูปถ่าย (43/AR), ปพ.1 หน้า (44/AS), ปพ.1 หลัง (45/AT), ความประพฤติ (46/AU)
     
     let photoUrl = rowIndex ? sheet.getRange(rowIndex, 44).getValue() : "-";
     let transUrl = rowIndex ? sheet.getRange(rowIndex, 45).getValue() : "-";
-    let conductUrl = rowIndex ? sheet.getRange(rowIndex, 46).getValue() : "-";
+    let transUrl2 = rowIndex ? sheet.getRange(rowIndex, 46).getValue() : "-";
+    let conductUrl = rowIndex ? sheet.getRange(rowIndex, 47).getValue() : "-";
    
     if(fd.photoFile && fd.photoFile.data) photoUrl = uploadFile(fd.photoFile, CONFIG.FOLDER_ID_PHOTO, appId+"_Photo");
-    if(fd.transcriptFile && fd.transcriptFile.data) transUrl = uploadFile(fd.transcriptFile, CONFIG.FOLDER_ID_TRANSCRIPT, appId+"_Transcript");
+    if(fd.transcriptFile && fd.transcriptFile.data) transUrl = uploadFile(fd.transcriptFile, CONFIG.FOLDER_ID_TRANSCRIPT, appId+"_Transcript1");
+    
+    // อัปโหลดไฟล์ที่ 2
+    if(fd.transcriptFile2 && fd.transcriptFile2.data) {
+        transUrl2 = uploadFile(fd.transcriptFile2, CONFIG.FOLDER_ID_TRANSCRIPT, appId+"_Transcript2");
+    }
+    
     if(fd.conductFile && fd.conductFile.data) conductUrl = uploadFile(fd.conductFile, CONFIG.FOLDER_ID_CONDUCT, appId+"_Conduct");
 
     // เตรียมข้อมูลอื่นๆ
@@ -157,50 +164,55 @@ function submitApplication(fd) {
        prov: fd.province, dist: fd.district, sub: fd.subdistrict, zip: fd.zipcode
     });
 
-    // --- [จุดที่ 4 - สำคัญที่สุด] เรียงข้อมูลลง Array ให้ตรงคอลัมน์เป๊ะๆ ---
+    // --- [จุดที่ 4] จัดเรียงข้อมูลลง Array (สำคัญมาก) ---
+    // ข้อมูลชุดนี้จะเริ่มเขียนลงที่ Column C (Index 2 ใน Sheet / Index 0 ใน Array นี้)
+    
     const rowData = [
-      // 0-4 (ประเภท, สถานะ, หมายเหตุ, ระดับ, แผน)
+      // Col C, D, E, F, G
       applyTypeThai, statusText, "", fd.level, fd.plan,
       
-      // 5-9 (คำนำหน้า, ชื่อ, สกุล, ชื่ออังกฤษ, สกุลอังกฤษ)
+      // Col H, I, J, K, L
       fd.prefix, fd.firstname, fd.lastname, fd.firstnameEn, fd.lastnameEn, 
       
-      // 10-14 (รร.เดิม, จว.เดิม, วันเกิด, สัญชาติ, ศาสนา)
+      // Col M, N, O, P, Q
       fd.oldSchoolName, fd.oldSchoolProvince, "'"+fd.dob, fd.nationality, fd.religion, 
       
-      // 15-19 (เลขบัตร, เบอร์, ที่อยู่, สถานะครอบครัว, คำนำหน้าพ่อ)
+      // Col R, S, T, U, V
       "'"+fd.idCard, "'"+fd.phone, addr, fd.famStatus, f.prefix, 
       
-      // 20-24 (ชื่อพ่อ, สกุลพ่อ, อาชีพพ่อ, อายุพ่อ, เบอร์พ่อ)
+      // Col W, X, Y, Z, AA
       f.name, f.lname, f.job, f.age, "'"+f.phone, 
       
-      // 25-29 (ที่อยู่พ่อ, คำนำหน้าแม่, ชื่อแม่, สกุลแม่, อาชีพแม่)
+      // Col AB, AC, AD, AE, AF
       f.addr, m.prefix, m.name, m.lname, m.job, 
       
-      // 30-34 (อายุแม่, เบอร์แม่, ที่อยู่แม่, คำนำหน้าปก., ชื่อปก.)
+      // Col AG, AH, AI, AJ, AK
       m.age, "'"+m.phone, m.addr, g.prefix, g.name, 
       
-      // 35-39: สกุลปก., ความเกี่ยวข้อง, อาชีพปก., อายุปก., เบอร์ปก.
+      // Col AL, AM, AN, AO, AP
       g.lname, 
-      g.rel,   // <-- ช่องความเกี่ยวข้อง (ที่เพิ่มใหม่)
+      g.rel,   // <-- ความเกี่ยวข้อง
       g.job, 
       g.age, 
       "'"+g.phone, 
       
-      // 40+: ที่อยู่ปก., รูป, ปพ.1, ความประพฤติ, JSON
+      // Col AQ, AR, AS, AT, AU
       g.addr, 
       photoUrl, 
       transUrl, 
+      transUrl2, // <-- ปพ.1 ใบที่ 2
       conductUrl,
+      
+      // Col AV
       rawAddr 
     ];
 
     if(rowIndex) {
-      // อัปเดตแถวเดิม (เริ่มเขียนที่คอลัมน์ C / Index 3)
+      // อัปเดตแถวเดิม (เริ่มเขียนที่คอลัมน์ C / Index 3 ของ Sheet)
       sheet.getRange(rowIndex, 3, 1, rowData.length).setValues([rowData]);
       return { success: true, message: "อัปเดตข้อมูลเรียบร้อย", appId: appId };
     } else {
-      // เพิ่มแถวใหม่
+      // เพิ่มแถวใหม่ (Timestamp, AppID, ...rowData)
       sheet.appendRow([timestamp, appId, ...rowData]);
       return { success: true, message: "ส่งใบสมัครเรียบร้อย", appId: appId };
     }
@@ -229,7 +241,7 @@ function checkStatus(idCard) {
            status: data[i][3], 
            reason: data[i][4], 
            applyType: data[i][2],
-           seatNo: data[i][47], 
+           seatNo: data[i][48], 
            
            // --- [จุดที่แก้ไข] --- 
            // เพิ่ม || data[i][3]==='อนุมัติ' เพื่อให้ User เอาข้อมูลไปพิมพ์บัตรได้
@@ -276,7 +288,8 @@ function getAdminData() {
       
         photo: row[43],      
         transcript: row[44], 
-        conduct: row[45],
+        transcript2: row[45], 
+        conduct: row[46],
         // ----------------------------------------
 
         fullData: row
@@ -468,4 +481,25 @@ function checkDuplicateID(idCard) {
   const isDuplicate = data.slice(1).some(row => String(row[17]).replace(/'/g, '').trim() === String(idCard));
   
   return isDuplicate; // ส่งค่า true (ซ้ำ) หรือ false (ไม่ซ้ำ) กลับไป
+}
+
+function saveLog(action, detail, appId) {
+  try {
+    // ตรวจสอบว่ามี Sheet ชื่อ Log หรือยัง ถ้าไม่มีให้สร้าง (กันพลาด)
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName("Log");
+    if (!sheet) {
+      sheet = ss.insertSheet("Log");
+      sheet.appendRow(["Timestamp", "Action", "Detail", "AppID"]);
+    }
+    
+    // บันทึกเวลาปัจจุบัน
+    var timestamp = new Date();
+    
+    // บันทึกลงแถวใหม่
+    sheet.appendRow([timestamp, action, detail, appId || "-"]);
+    
+  } catch(e) {
+    console.log("Log Error: " + e.message); // ถ้าบันทึก Log ไม่ได้ ให้พ่นลง Console แทน
+  }
 }
