@@ -69,6 +69,8 @@ function adminLogin(u, p) {
       let dbUser = String(data[i][0]).trim();
       let dbPass = String(data[i][1]).trim();
       if(dbUser !== "" && dbUser === String(u).trim() && dbPass === String(p).trim()) {
+        // [เพิ่ม] บันทึก Log การ Login
+        saveLog("Admin Login", `เข้าสู่ระบบโดย ${data[i][3]}`, "System");
         return { success: true, role: parseInt(data[i][2]) || 1, name: data[i][3] || "เจ้าหน้าที่" };
       }
     }
@@ -210,10 +212,14 @@ function submitApplication(fd) {
     if(rowIndex) {
       // อัปเดตแถวเดิม (เริ่มเขียนที่คอลัมน์ C / Index 3 ของ Sheet)
       sheet.getRange(rowIndex, 3, 1, rowData.length).setValues([rowData]);
+      // [เพิ่ม] Log
+      saveLog("แก้ไขใบสมัคร", `แก้ไขข้อมูลเลขบัตร ${fd.idCard}`, appId);
       return { success: true, message: "อัปเดตข้อมูลเรียบร้อย", appId: appId };
     } else {
       // เพิ่มแถวใหม่ (Timestamp, AppID, ...rowData)
       sheet.appendRow([timestamp, appId, ...rowData]);
+      // [เพิ่ม] Log
+      saveLog("สมัครใหม่", `สมัครระดับ ${fd.level} แผน ${fd.plan}`, appId);
       return { success: true, message: "ส่งใบสมัครเรียบร้อย", appId: appId };
     }
 
@@ -324,14 +330,36 @@ function updateStudentStatus(ri, st, re, by) {
       const sheet = ss.getSheetByName(CONFIG.SHEET_NAME_DATA);
       if (!sheet) throw new Error("ไม่พบแผ่นชีต: " + CONFIG.SHEET_NAME_DATA);
 
+        // --- [จุดแก้ไขที่ 1] จัดการข้อความที่จะบันทึก ---
+      let finalReason = re;
+      
+      // ถ้าสถานะคือ 'อนุมัติ' เรามักจะไม่ต้องการเหตุผลปฏิเสธเก่าๆ (Clean Data)
+      if (st === 'อนุมัติ') {
+         finalReason = "เอกสารครบถ้วน"; // หรือปล่อยว่าง "" ก็ได้
+      }
+      
+      // สร้างข้อความที่จะบันทึกใน Column E
+      // รูปแบบ: "เหตุผล (ชื่อคนทำ)"
+      let logText = finalReason + " (" + by + ")";
+      // ---------------------------------------------
+      
       // 1. บันทึกสถานะลงแผ่นหลัก
       sheet.getRange(ri, 4).setValue(st); 
-      sheet.getRange(ri, 5).setValue(re + " (" + by + ")");
-      SpreadsheetApp.flush(); // บันทึกทันที
+      sheet.getRange(ri, 5).setValue(logText); // ใช้ตัวแปรใหม่ที่สร้างขึ้น
+      SpreadsheetApp.flush();
+
+     // --- [เพิ่มส่วนนี้] ดึง AppID มาเพื่อบันทึก Log ---
+      const rowValues = sheet.getRange(ri, 1, 1, sheet.getLastColumn()).getValues()[0]; 
+      const appId = rowValues[1]; 
+      
+      // สั่งบันทึก Log
+      saveLog("เปลี่ยนสถานะ", "สถานะ: " + st + ", เหตุผล: " + finalReason, by, appId);
+      
+      // ---------------------------------------------
 
       // 2. ระบบรันเลขที่นั่งสอบ (ทำงานเฉพาะเมื่อกด 'อนุมัติ')
       if (st === 'อนุมัติ') {
-         const COL_EXAM_ID = 48; // (เลขที่นั่งสอบ)
+         const COL_EXAM_ID = 49; // (เลขที่นั่งสอบ)
          
          // ตรวจสอบและสร้างคอลัมน์เพิ่มอัตโนมัติ (ถ้าไม่พอ)
          if (sheet.getMaxColumns() < COL_EXAM_ID) {
@@ -483,23 +511,42 @@ function checkDuplicateID(idCard) {
   return isDuplicate; // ส่งค่า true (ซ้ำ) หรือ false (ไม่ซ้ำ) กลับไป
 }
 
-function saveLog(action, detail, appId) {
+function saveLog(action, detail, by, appId) {
+  // 1. เริ่มต้นการ Lock เพื่อป้องกันข้อมูลชนกันเมื่อมีคนสมัครพร้อมกัน
+  var lock = LockService.getScriptLock();
   try {
-    // ตรวจสอบว่ามี Sheet ชื่อ Log หรือยัง ถ้าไม่มีให้สร้าง (กันพลาด)
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName("Log");
+    lock.waitLock(10000); // รอคิวสูงสุด 10 วินาที
+  } catch (e) {
+    console.log("Could not obtain lock after 10 seconds.");
+    return; // ถ้าคิวแน่นมาก ให้ข้ามการเก็บ Log ไปก่อน เพื่อไม่ให้ระบบหลักค้าง
+  }
+
+  try {
+    // 2. [แก้ไข] เปิดไฟล์โดยใช้ ID จาก CONFIG โดยตรง (แม่นยำที่สุด)
+    var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    
+    // กำหนดชื่อ Sheet ที่จะเก็บ Log
+    var logSheetName = "Log"; // หรือจะเพิ่ม CONFIG.SHEET_NAME_LOG ก็ได้
+    var sheet = ss.getSheetByName(logSheetName);
+
+    // 3. ถ้ายังไม่มี Sheet นี้ ให้สร้างใหม่และตีหัวตาราง
     if (!sheet) {
-      sheet = ss.insertSheet("Log");
-      sheet.appendRow(["Timestamp", "Action", "Detail", "AppID"]);
+      sheet = ss.insertSheet(logSheetName);
+      sheet.appendRow(["Timestamp", "Action", "Detail", "By", "AppID"]);
     }
     
-    // บันทึกเวลาปัจจุบัน
     var timestamp = new Date();
     
-    // บันทึกลงแถวใหม่
-    sheet.appendRow([timestamp, action, detail, appId || "-"]);
+    // 4. บันทึกข้อมูล
+    sheet.appendRow([timestamp, action, detail, by || "-", appId || "-"]);
+    
+    // 5. สั่งให้เขียนทันที (Flush)
+    SpreadsheetApp.flush(); 
     
   } catch(e) {
-    console.log("Log Error: " + e.message); // ถ้าบันทึก Log ไม่ได้ ให้พ่นลง Console แทน
+    console.log("Log Error: " + e.message); 
+  } finally {
+    // 6. ปลด Lock เสมอ เพื่อให้คิวถัดไปทำงานต่อได้
+    lock.releaseLock();
   }
 }
