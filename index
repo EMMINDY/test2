@@ -320,7 +320,9 @@
 
     <div id="home-section">
       <div class="row g-3">
-        <div class="col-12"><div class="alert alert-primary text-center shadow-sm">ยินดีต้อนรับเข้าสู่ระบบรับสมัคร</div></div>
+        <div class="alert alert-primary text-center shadow-sm">
+        <strong>ยินดีต้อนรับเข้าสู่ระบบรับสมัคร</strong>
+        <br> <small>เวลารับสมัคร 08.30 น. - 16.30 น.</small> </div>
         <div class="col-md-6"><button class="btn btn-primary w-100 btn-lg-custom shadow-sm" onclick="openForm('special')"><i class="bi bi-star-fill me-2"></i>ห้องเรียนพิเศษ</button></div>
         <div class="col-md-6"><button class="btn btn-success w-100 btn-lg-custom shadow-sm" onclick="openForm('general')"><i class="bi bi-book-half me-2"></i>ห้องเรียนทั่วไป</button></div>
         <div class="col-12 mt-4"><button class="btn btn-outline-secondary w-100 py-3 rounded-pill" onclick="showSection('status-section')"><i class="bi bi-search me-2"></i>ตรวจสอบสถานะ / แก้ไขข้อมูล</button></div>
@@ -440,8 +442,8 @@
         <div class="row g-3">
            <div class="col-md-3"><label class="form-label">บ้านเลขที่ <span class="req-star">*</span></label><input type="text" id="addrNo" class="form-control" required></div>
            <div class="col-md-2"><label class="form-label">หมู่ <span class="req-star">*</span></label><input type="text" id="addrMoo" class="form-control" required></div>
-           <div class="col-md-3"><label class="form-label">ซอย <span class="req-star">*</span></label><input type="text" id="addrSoi" class="form-control" required></div>
-           <div class="col-md-4"><label class="form-label">ถนน <span class="req-star">*</span></label><input type="text" id="addrRoad" class="form-control" required></div>
+           <div class="col-md-3"><label class="form-label">ซอย (ไม่มีให้ -) <span class="req-star">*</span></label><input type="text" id="addrSoi" class="form-control" required></div>
+           <div class="col-md-4"><label class="form-label">ถนน (ไม่มีให้ -) <span class="req-star">*</span></label><input type="text" id="addrRoad" class="form-control" required></div>
            <div class="col-md-4"><label class="form-label">จังหวัด <span class="req-star">*</span></label><select id="province" class="form-select" required onchange="chProv()"><option value="">เลือก</option></select></div>
            <div class="col-md-4"><label class="form-label">อำเภอ <span class="req-star">*</span></label><select id="district" class="form-select" required onchange="chDist()" disabled><option value="">เลือก</option></select></div>
            <div class="col-md-4"><label class="form-label">ตำบล <span class="req-star">*</span></label><select id="subdistrict" class="form-select" required onchange="chSub()" disabled><option value="">เลือก</option></select></div>
@@ -564,7 +566,7 @@
             </div>
         </div>
         <div id="ts-box" class="mb-4">
-            <label class="form-label">ใบรับรองผลการเรียน (ปพ.1) 5 ภาคเรียน  <span class="req-star">*</span></label>
+            <label class="form-label">ใบรับรองผลการเรียน (ปพ.1)   <span class="req-star">*</span></label>
             <input type="file" id="tsFile" class="form-control" accept="image/*,application/pdf" onchange="readF(this,'ts64')">
             <input type="hidden" id="ts64">
             <div id="oldTs" class="hidden mt-2"></div>
@@ -893,7 +895,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-
+    
+    var currentAdminName = "เจ้าหน้าที่";
 
   document.addEventListener('DOMContentLoaded', function() {
     // หน่วงเวลาเล็กน้อยเพื่อให้หน้าเว็บหลักพร้อมก่อนแสดง Popup
@@ -906,10 +909,13 @@
               <strong>1.</strong> ไฟล์รูปถ่ายชุดนักเรียนหน้าตรง
             </div>
             <div style="margin-bottom: 10px;">
-              <strong>2.</strong> ไฟล์ระเบียนแสดงผลการเรียน (ปพ.1) 5 ภาคเรียน
+              <strong>2.</strong> ไฟล์ระเบียนแสดงผลการเรียน (ปพ.1) 5 ภาคเรียน (สำหรับ ม.4)
+            </div>
+            <div style="margin-bottom: 10px;">
+              <strong>3.</strong> ไฟล์ระเบียนแสดงผลการเรียน (ปพ.1) ป.4-5 (สำหรับ ม.1)
             </div>
             <div style="margin-bottom: 15px;">
-              <strong>3.</strong> ไฟล์ใบรับรองความประพฤติ
+              <strong>4.</strong> ไฟล์ใบรับรองความประพฤติ
             </div>
             
             <div style="background-color: #fff0f6; border: 1px dashed #d63384; padding: 15px; border-radius: 10px; font-size: 14px; color: #d63384; line-height: 1.6;">
@@ -2972,7 +2978,7 @@ function previewDoc(url) {
 
     const schoolName = "โรงเรียนอรัญประเทศ";
     const year = "2569";
-    const examSeatNo = s.fullData[47] || "-"; 
+    const examSeatNo = s.fullData[48] || "-"; 
     let photoUrl = getDirectImg(s.photo);
     
     // ลิงก์โลโก้
@@ -2994,12 +3000,11 @@ function previewDoc(url) {
             width: 160mm; height: 110mm; 
             border: 5px double #0d6efd; 
             background: #fff;
-            padding: 30px 40px; /* เพิ่ม Padding ให้ดูสมดุลเมื่อไม่มีลายเซ็น */
+            padding: 30px 40px; 
             box-sizing: border-box;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
             display: flex; 
             flex-direction: column; 
-            /* justify-content: center; ถ้าอยากให้ข้อมูลอยู่กึ่งกลางแนวตั้ง ให้เปิดบรรทัดนี้ */
         }
 
         .header { 
@@ -3019,6 +3024,7 @@ function previewDoc(url) {
         .photo-col { width: 110px; text-align: center; }
         .photo { width: 100px; height: 125px; object-fit: cover; border: 1px solid #999; border-radius: 4px; background: #eee; }
         
+        /* Default nowrap for standard rows */
         .row-item { display: flex; align-items: baseline; margin-bottom: 8px; white-space: nowrap; }
         .label { font-weight: bold; width: 120px; color: #333; flex-shrink: 0; }
         .seat-highlight { color: #d63384; font-weight: bold; font-size: 18px; background: #fff0f6; padding: 0 8px; border-radius: 4px; border: 1px dashed #d63384; }
@@ -3057,7 +3063,12 @@ function previewDoc(url) {
                     <div class="row-item"><span class="label">ชื่อ-สกุล:</span> <span>${s.name}</span></div>
                     <div class="row-item"><span class="label">เลขบัตรปชช.:</span> <span>${s.idCard}</span></div>
                     <div class="row-item"><span class="label">ระดับชั้น:</span> <span>${s.level}</span></div>
-                    <div class="row-item"><span class="label">แผนการเรียน:</span> <span style="font-size:15px;">${s.plan}</span></div>
+                    
+                    <div class="row-item" style="align-items: flex-start;">
+                        <span class="label">แผนการเรียน:</span> 
+                        <span style="font-size:15px; white-space: normal; line-height: 1.4; flex: 1;">${s.plan}</span>
+                    </div>
+
                     <div class="row-item"><span class="label">สนามสอบ:</span> <span>${schoolName}</span></div>
                 </div>
                 <div class="photo-col">
@@ -3108,7 +3119,6 @@ function printCardUser(dataObj) {
     if (!dataObj) { alert("ไม่พบข้อมูล"); return; }
     
     // แปลงข้อมูลจาก Object ที่ Server ส่งมา ให้เป็นรูปแบบที่ Template บัตรต้องการ
-    // fullData index: 0=Time, 1=AppID, ..., 5=Level, 6=Plan, ..., 13=IDCard, ..., 23=Photo
     const s = {
         name: dataObj.name,
         seatNo: dataObj.seatNo || "-",
@@ -3123,7 +3133,7 @@ function printCardUser(dataObj) {
     let photoUrl = getDirectImg(s.photo); 
     const logoUrl = "https://drive.google.com/thumbnail?id=1orEjf83Ew6ygXmhqSyEmGawrvy0UUhGq&sz=w200";
 
-    // HTML บัตรสอบ (เหมือน V.10 เป๊ะ)
+    // HTML บัตรสอบ
     let htmlContent = `
     <html><head><title>บัตรสอบ - ${s.name}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -3140,6 +3150,7 @@ function printCardUser(dataObj) {
         .info-col { flex: 1; font-size: 16px; line-height: 1.8; padding-right: 20px; }
         .photo-col { width: 110px; text-align: center; }
         .photo { width: 100px; height: 125px; object-fit: cover; border: 1px solid #999; border-radius: 4px; background: #eee; }
+        /* กำหนด white-space: nowrap เป็นค่าเริ่มต้นสำหรับแถวทั่วไป */
         .row-item { display: flex; align-items: baseline; margin-bottom: 8px; white-space: nowrap; }
         .label { font-weight: bold; width: 120px; color: #333; flex-shrink: 0; }
         .seat-highlight { color: #d63384; font-weight: bold; font-size: 18px; background: #fff0f6; padding: 0 8px; border-radius: 4px; border: 1px dashed #d63384; }
@@ -3158,7 +3169,12 @@ function printCardUser(dataObj) {
                     <div class="row-item"><span class="label">ชื่อ-สกุล:</span> <span>${s.name}</span></div>
                     <div class="row-item"><span class="label">เลขบัตรปชช.:</span> <span>${s.idCard}</span></div>
                     <div class="row-item"><span class="label">ระดับชั้น:</span> <span>${s.level}</span></div>
-                    <div class="row-item"><span class="label">แผนการเรียน:</span> <span style="font-size:15px;">${s.plan}</span></div>
+                    
+                    <div class="row-item" style="align-items: flex-start;">
+                        <span class="label">แผนการเรียน:</span> 
+                        <span style="font-size:15px; white-space: normal; line-height: 1.4; flex: 1;">${s.plan}</span>
+                    </div>
+
                     <div class="row-item"><span class="label">สนามสอบ:</span> <span>${schoolName}</span></div>
                 </div>
                 <div class="photo-col">
@@ -3188,15 +3204,6 @@ function printCardUser(dataObj) {
         setTimeout(() => iframe.contentWindow.print(), 1000);
     }
 }
-
-// ตั้งค่าให้ช่อง text-eng พิมพ์ได้เฉพาะภาษาอังกฤษ
-document.querySelectorAll('.text-eng').forEach(function(el) {
-    el.addEventListener('input', function() {
-        // ยอมให้พิมพ์: A-Z, a-z, ช่องว่าง, จุด(.), ขีด(-)
-        // ลบตัวอักษรอื่นออก (เช่น ภาษาไทย, ตัวเลข)
-        this.value = this.value.replace(/[^a-zA-Z\s.-]/g, '');
-    });
-});
 
   </script>
   <div class="modal fade" id="studentModal" tabindex="-1" aria-hidden="true">
